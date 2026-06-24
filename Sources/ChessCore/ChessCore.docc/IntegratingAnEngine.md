@@ -102,7 +102,6 @@ A typical ``ChessEngine`` adapter drives
 
 - <doc:ConvertingMoveNotation>
 - <doc:FENs>
-- <doc:AnalysisMath>
 - ``ChessEngine``
 - ``EngineAnalysis``
 - ``UCIOutputParser``

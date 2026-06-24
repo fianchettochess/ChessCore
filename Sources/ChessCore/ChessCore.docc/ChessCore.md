@@ -1,25 +1,24 @@
 # ``ChessCore``
 
 A portable, Foundation-only chess core: the position model, legal move
-generation, FEN, SAN↔UCI, PGN, an opening book, UCI engine-output parsing, and
-the analysis / storage seams — with no Apple-UI dependencies.
+generation, FEN, SAN↔UCI, PGN, an opening book, and UCI engine-output parsing —
+with no Apple-UI dependencies.
 
 ## Overview
 
 `ChessCore` is a pure-Swift chess library. It is **Foundation-only**: no
 SwiftData, CloudKit, GameKit, CoreML, UIKit, AppKit, SwiftUI, Combine, or
-CoreBluetooth, and no networking. Presentation, storage, and engine access sit
-behind protocol seams, so the value types are `Sendable` and build everywhere
-down to **iOS 13 / macOS 10.15** (and on Linux/Android).
+CoreBluetooth, and no networking. Presentation and engine access sit behind
+protocol seams, so the value types are `Sendable` and build everywhere down to
+**iOS 13 / macOS 10.15** (and on Linux/Android).
 
-The library is organized in two layers:
-
-- **Primitives** — core chess machinery: ``Position``/``Move``/``Square``,
-  ``MoveGenerator`` (+ perft), FEN, ``UCIParser`` (SAN↔UCI), ``PGNParser`` /
-  ``PGNExporter``, ``OpeningBook``, ``UCIOutputParser`` / ``StockfishInfo``.
-- **Analysis & persistence** — math and seams layered over the model:
-  ``AccuracyAggregator``, ``EndgameArchetype``, ``StreakMath``, and the storage
-  seam (``JSONBlobStore`` / ``BlobBackedStore``).
+It is the minimal "chessboard and pieces" core — the chess machinery:
+``Position``/``Move``/``Square``, ``MoveGenerator`` (+ perft), FEN, ``UCIParser``
+(SAN↔UCI), ``Game`` (the move tree), ``PGNParser`` / ``PGNExporter``,
+``OpeningBook``, and ``UCIOutputParser`` / ``StockfishInfo``. App-specific
+analysis, stat, and persistence logic lives a layer up in
+[FianchettoKit](https://github.com/jaredbrewer); the storage and presentation
+concerns stay out of the core.
 
 The ``ChessEngine`` protocol and ``EngineAnalysis`` types describe an engine
 abstraction without binding to any concrete engine — wire up
@@ -59,8 +58,6 @@ print(position.fen)  // "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3
 - <doc:ConvertingMoveNotation>
 - <doc:OpeningBookGuide>
 - <doc:IntegratingAnEngine>
-- <doc:AnalysisMath>
-- <doc:StorageSeam>
 
 ### The board model
 
@@ -122,19 +119,7 @@ print(position.fen)  // "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3
 - ``GuessEloResult``
 - ``EngineError``
 
-### Analysis math
+### The game tree
 
-- ``AccuracyAggregator``
-- ``EndgameArchetype``
-- ``CustomEndgameConfig``
-- ``StreakMath``
-
-### The storage seam
-
-- ``JSONBlobStore``
-- ``BlobBackedStore``
-
-### Utilities
-
-- ``EvalJSON``
-- ``PercentFormat``
+- ``Game``
+- ``MoveNode``
