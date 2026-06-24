@@ -67,6 +67,18 @@ extensions at integration time; `MoveNode` also waits on `MoveGenerator`
   `ScoredMove`/`Evaluation`, `PlayConfig`, `EngineError`, etc. (`import SwiftUI`
   → `Foundation`).
 
+**Landed (tranche 5 — endgame / traps / ratings / network):**
+- `EndgameArchetype` (procedural endgame FEN generator) + `CustomEndgameConfig`,
+  `OpeningTrap`, `SquareOffSyncGate`, `AccuracyAggregator` (win-probability +
+  per-move accuracy curves) — pure logic over the model/primitives.
+- `TablebaseService`, `LichessExplorer`, `ChessAPIService` (Lichess / Syzygy /
+  Chess.com REST clients). Decoupled: `os.Logger` dropped; networking made
+  portable via `#if canImport(FoundationNetworking)` (URLSession/URLRequest live
+  in `FoundationNetworking` on non-Apple) and a back-deployed
+  `URLSession.dataResult(for:)` (`bytes(for:)`'s AsyncBytes needs iOS 15/macOS
+  12; `dataResult` keeps these on the iOS 13/macOS 10.15 floor + portable to
+  Android).
+
 All of the above build for `aarch64-unknown-linux-android28` and pass the unit
 tests on macOS. These types are currently **copied** into ChessCore additively
 — the app keeps its own definitions until the integration step (point the iOS
