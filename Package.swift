@@ -17,6 +17,13 @@ import PackageDescription
 
 let package = Package(
     name: "ChessCore",
+    // Declared floor: iOS 13 / macOS 10.15 (parity with SwiftStockfish; the
+    // Swift-concurrency back-deployment line). The CODE itself is pure Swift
+    // stdlib + ancient Foundation and has been verified to build all the way
+    // down to iOS 11 / macOS 10.10 (the toolchain minimum) — `isolated deinit`
+    // does not force 10.15 — so the floor can be lowered to iOS 12 / macOS 10.13
+    // (the Swift-ABI-stable-in-OS line) for maximum reach at zero API cost if a
+    // public release ever wants it.
     platforms: [
         .macOS(.v10_15),
         .iOS(.v13),
