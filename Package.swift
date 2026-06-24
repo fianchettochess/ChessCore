@@ -31,6 +31,12 @@ let package = Package(
     products: [
         .library(name: "ChessCore", targets: ["ChessCore"]),
     ],
+    // DocC generation only — the swift-docc-plugin is a build-tool/command plugin
+    // and adds NOTHING to the library's own dependency graph or its compiled
+    // output. Consumers of ChessCore never see it.
+    dependencies: [
+        .package(url: "https://github.com/swiftlang/swift-docc-plugin", from: "1.0.0"),
+    ],
     targets: [
         .target(name: "ChessCore", path: "Sources/ChessCore"),
         .testTarget(name: "ChessCoreTests", dependencies: ["ChessCore"], path: "Tests/ChessCoreTests"),

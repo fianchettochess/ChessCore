@@ -1,0 +1,68 @@
+site_name: ChessCore
+site_description: A portable, Foundation-only Swift chess core — model, move generation, FEN, SAN/UCI, PGN, opening book, and analysis seams.
+site_author: Fianchetto
+copyright: "ChessCore — a portable, Foundation-only Swift chess library."
+
+docs_dir: docs
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.top
+    - navigation.indexes
+    - content.code.copy
+    - content.code.annotate
+    - toc.follow
+    - search.suggest
+    - search.highlight
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.details
+
+nav:
+  - Home: index.md
+  - Installation: installation.md
+  - Getting Started: getting-started.md
+  - Concepts:
+      - The board model: concepts/model.md
+      - Move generation & perft: concepts/move-generation.md
+      - FEN: concepts/fen.md
+      - SAN & UCI: concepts/san-uci.md
+      - PGN: concepts/pgn.md
+      - Opening book: concepts/opening-book.md
+      - Engine protocol: concepts/engine-protocol.md
+      - Analysis math: concepts/analysis.md
+      - Storage seam: concepts/storage.md
+  - Usage Examples: examples.md
