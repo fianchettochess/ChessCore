@@ -1,4 +1,5 @@
 import Foundation
+import ChessCore
 
 /// A drillable "knife-edge" opening position: the opponent just played
 /// something unsound and there's a single response that holds.

@@ -1,4 +1,5 @@
 import Foundation
+import ChessCore
 
 /// Portable, `Sendable` snapshot of a stored game — the DTO mirror of the app's
 /// SwiftData `@Model StoredGame`. PGN tokenization + Elo parsing happen in the

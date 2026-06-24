@@ -5,10 +5,10 @@ import Foundation
 /// TacticsPerformanceStore and RepertoireDrillStats (differing only in the
 /// per-attempt success predicate); callers now map attempts to `[Bool]`
 /// (most-recent last) and call these. (dedup audit 2026-06-16)
-nonisolated enum StreakMath {
+public nonisolated enum StreakMath {
     /// Length of the trailing run of `true` (the streak ending at the most
     /// recent attempt). Any `false` breaks it.
-    static func current(_ flags: [Bool]) -> Int {
+    public static func current(_ flags: [Bool]) -> Int {
         var streak = 0
         for flag in flags.reversed() {
             guard flag else { return streak }
@@ -18,7 +18,7 @@ nonisolated enum StreakMath {
     }
 
     /// Longest run of `true` anywhere in the sequence.
-    static func best(_ flags: [Bool]) -> Int {
+    public static func best(_ flags: [Bool]) -> Int {
         var best = 0
         var current = 0
         for flag in flags {

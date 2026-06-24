@@ -1,4 +1,5 @@
 import Foundation
+import ChessCore
 
 /// Pure-logic state machine for the "physical board diverged from the
 /// app" transition that drives the clock pause + haptic in

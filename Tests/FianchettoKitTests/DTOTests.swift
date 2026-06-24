@@ -1,5 +1,6 @@
 import XCTest
-@testable import ChessCore
+@testable import FianchettoKit
+import ChessCore
 
 final class DTOTests: XCTestCase {
 
