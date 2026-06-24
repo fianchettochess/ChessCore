@@ -22,8 +22,20 @@ presentation extension), and the per-file decoupling approaches.
 - `StreakMath` — consecutive-correct streak math (current/best run).
 - `DebouncedWriter` — Foundation/Dispatch debounce utility.
 
-Both were adversarially verified as Foundation-only and build for
-`aarch64-unknown-linux-android28` (see the app repo's Android build notes).
+**Landed (keystone — foundational model):** `ChessModel.swift` — the portable
+value types `PieceColor`, `PieceType`, `Piece`, `Square`, `CastlingRights`,
+`Move`, `MoveRecord`, `MoveAnnotation` (PGN/NAG logic), `MoveQuality`,
+`GameState`, and `Position` (FEN parse/serialize, en-passant, insufficient
+material, `stockfishSafeFEN`, `positionKey`). The iOS presentation that was
+woven into these in the app (SwiftUI `Color`s, SF Symbols, asset names,
+`@Observable` `MoveNode`, localizable text) stays app-side and reattaches as
+extensions at integration time; `MoveNode` also waits on `MoveGenerator`
+(tranche 3).
+
+All of the above build for `aarch64-unknown-linux-android28` and pass the unit
+tests on macOS. These types are currently **copied** into ChessCore additively
+— the app keeps its own definitions until the integration step (point the iOS
+target at ChessCore via `@_exported import`, then delete the in-app copies).
 
 ## Intended internal boundary
 
