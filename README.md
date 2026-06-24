@@ -32,6 +32,20 @@ woven into these in the app (SwiftUI `Color`s, SF Symbols, asset names,
 extensions at integration time; `MoveNode` also waits on `MoveGenerator`
 (tranche 3).
 
+**Landed (tranche 3 — engine primitives over the model):**
+- `MoveGenerator` — legal/pseudo-legal move generation, make-move, attack
+  detection, SAN. Decoupled for portability: `OSAllocatedUnfairLock` →
+  `NSLock`, the legal-moves cache now keys on `Position.positionKey` (breaking
+  the back-dependency on OpeningBook), and `os.Logger` dropped. Validated by a
+  **perft suite** (exact node counts — initial perft(4)=197281, Kiwipete
+  perft(3)=97862, plus en-passant/promotion positions) that also pins behavior
+  for a future magic-bitboard rewrite.
+- `SharedUtilities` — `Position`/`PieceColor`/`PieceType` extensions
+  (`materialSummary`, `mover(ply:)`, `fenStartsWithWhite`), `EvalJSON`,
+  `PercentFormat`, `Array.capLast`, `TimeInterval.clockString`.
+- `UCIOutputParser` — `StockfishInfo` (UCI `info`/`bestmove` payload, generic to
+  the UCI protocol) + parsing; `os.Logger` dropped.
+
 All of the above build for `aarch64-unknown-linux-android28` and pass the unit
 tests on macOS. These types are currently **copied** into ChessCore additively
 — the app keeps its own definitions until the integration step (point the iOS
