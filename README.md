@@ -11,6 +11,12 @@ This is a **private** package — it carries product IP (tactics extraction,
 repertoire auditing, trap mining, SRS, accuracy/Elo math). Consumed by both apps
 as a local (path) dependency.
 
+**Deployment floor:** declared at **iOS 13 / macOS 10.15** (tvOS 13 / watchOS 6 /
+visionOS 1) — independent of Fianchetto's iOS 18.6 / macOS 15.6. The code is pure
+Swift stdlib + Foundation, verified to build down to **iOS 11 / macOS 10.10**, so
+the floor can be lowered to iOS 12 / macOS 10.13 (Swift-ABI-stable line) for
+maximum reach at no API cost if a public release wants it.
+
 ## Status
 
 Extraction is **in progress**, dependency-ordered. See
@@ -45,6 +51,21 @@ extensions at integration time; `MoveNode` also waits on `MoveGenerator`
   `PercentFormat`, `Array.capLast`, `TimeInterval.clockString`.
 - `UCIOutputParser` — `StockfishInfo` (UCI `info`/`bestmove` payload, generic to
   the UCI protocol) + parsing; `os.Logger` dropped.
+
+**Landed (tranche 4 — notation + book primitives):**
+- `PGNTokenizer` — `PGNGame`/`OrderedTags`, `PGNToken`, `PGNParser`
+  (tokenize/parse/`parseMove`/`Sendable` mainline snapshot), `PGNExporter`
+  token serialization, `MainLineMoveSnapshot`/`ParsedMainLine`.
+- `UCIParser` — SAN↔UCI translation (`uciToMove`/`uciToSAN`/`sanToUCI`/PV→SAN).
+- `GameTagCodec` — escape-safe `key=value;…` PGN-tag codec.
+- `OpeningBook` — ECO lookup + continuations with EP-transposition fallback.
+  Decoupled: `OSAllocatedUnfairLock` → `NSLock`, `os.Logger` dropped, and
+  `Bundle.main` resource loading replaced by injectable
+  `OpeningBook(precomputedData:isPlist:)` / `configureShared(…)` (the app wires
+  its bundle; Android wires its asset).
+- `EngineTypes` — `ChessEngine` engine-probe protocol, `EngineAnalysis`/
+  `ScoredMove`/`Evaluation`, `PlayConfig`, `EngineError`, etc. (`import SwiftUI`
+  → `Foundation`).
 
 All of the above build for `aarch64-unknown-linux-android28` and pass the unit
 tests on macOS. These types are currently **copied** into ChessCore additively
