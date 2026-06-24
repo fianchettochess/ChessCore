@@ -1,29 +1,31 @@
 // swift-tools-version: 6.0
 //
-// ChessCore — the portable, pure-Swift core carved out of the Fianchetto
-// chess app so it can be shared by the Apple app AND the Android (Skip/SkipFuse)
-// port. Foundation-only: NO SwiftData, CloudKit, GameKit, CoreML, UIKit, AppKit,
-// SwiftUI, Combine, or CoreBluetooth — those stay app-side behind protocol seams.
+// Two products carved out of the Fianchetto chess app so they can be shared by
+// the Apple app AND the Android (Skip/SkipFuse) port:
 //
-// PRIVATE package (product IP). The extraction is dependency-ordered; see
-// `docs/ANDROID_CARVE_PLAN.md` in the app repo for the full tranche plan. The
-// intended internal boundary is PRIMITIVES (move generation, FEN, SAN<->UCI,
-// PGN, opening book, UCI engine-output parsing — commodity, could one day be a
-// thin public package) vs LOGIC (tactics, repertoire, trap mining, SRS,
-// accuracy/Elo — differentiated). For now both live in one `ChessCore` target;
-// they will be split into `ChessCorePrimitives` + `ChessCore` targets once the
-// volume justifies it.
+//   • ChessCore — the GENERAL, community-grade chess core: the position model,
+//     move generation (+ perft), FEN, SAN<->UCI, PGN, opening book, the engine
+//     probe protocol, general analysis math, and the storage seam protocols.
+//     Foundation-only, NO SwiftData/CloudKit/GameKit/CoreML/UIKit/AppKit/SwiftUI/
+//     Combine/CoreBluetooth. Intended for an eventual permissive public release;
+//     the stale ChessKit incumbents leave this niche underserved.
+//
+//   • FianchettoKit — Fianchetto's DIFFERENTIATED product logic (private):
+//     tactics-from-your-games, repertoire build/audit/punish, personal trap
+//     mining, the SRS/stat stores, the @Model DTO mirrors. Depends on ChessCore.
+//
+// The dependency direction is one-way (FianchettoKit -> ChessCore); ChessCore
+// never references the app logic. See `docs/ANDROID_CARVE_PLAN.md`.
 import PackageDescription
 
 let package = Package(
     name: "ChessCore",
     // Declared floor: iOS 13 / macOS 10.15 (parity with SwiftStockfish; the
-    // Swift-concurrency back-deployment line). The CODE itself is pure Swift
-    // stdlib + ancient Foundation and has been verified to build all the way
-    // down to iOS 11 / macOS 10.10 (the toolchain minimum) — `isolated deinit`
-    // does not force 10.15 — so the floor can be lowered to iOS 12 / macOS 10.13
-    // (the Swift-ABI-stable-in-OS line) for maximum reach at zero API cost if a
-    // public release ever wants it.
+    // Swift-concurrency back-deployment line). ChessCore's code is pure Swift
+    // stdlib + Foundation and has been verified to build down to iOS 11 / macOS
+    // 10.10 (the toolchain minimum). NOTE: this package-level floor applies to
+    // BOTH targets; to give FianchettoKit its own (higher, Fianchetto-matching)
+    // floor it would need to be a separate package — see the package header.
     platforms: [
         .macOS(.v10_15),
         .iOS(.v13),
@@ -33,10 +35,13 @@ let package = Package(
     ],
     products: [
         .library(name: "ChessCore", targets: ["ChessCore"]),
+        .library(name: "FianchettoKit", targets: ["FianchettoKit"]),
     ],
     targets: [
         .target(name: "ChessCore", path: "Sources/ChessCore"),
+        .target(name: "FianchettoKit", dependencies: ["ChessCore"], path: "Sources/FianchettoKit"),
         .testTarget(name: "ChessCoreTests", dependencies: ["ChessCore"], path: "Tests/ChessCoreTests"),
+        .testTarget(name: "FianchettoKitTests", dependencies: ["FianchettoKit"], path: "Tests/FianchettoKitTests"),
     ],
     // Swift 6 only. Carved files come from the app's Swift-5 target, so each is
     // made Swift 6-clean as it lands (e.g. DebouncedWriter's deinit became an
