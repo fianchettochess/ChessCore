@@ -137,36 +137,15 @@ func buildAnalysis(
 }
 ```
 
-## Persist a small store
-
-```swift
-import ChessCore
-
-struct PuzzleProgress: BlobBackedStore {
-    static let blobKey = "puzzleProgress"
-    var solved: Set<String> = []
-    var streak: [Bool] = []
-    init() {}
-}
-
-let blobStore = MemoryBlobStore()         // your JSONBlobStore implementation
-var progress = PuzzleProgress.load(from: blobStore)
-progress.solved.insert("puzzle-42")
-progress.streak.append(true)
-progress.streak.capLast(50)               // keep the most recent 50
-progress.save(to: blobStore)
-
-print(StreakMath.current(progress.streak))
-```
-
 ## Generate an endgame to drill
 
-```swift
-let archetype = EndgameArchetype.allCases.randomElement()!
-let fen = archetype.randomFEN()
-print(archetype.displayCategory, fen)
+Endgame generation lives in **FianchettoKit** (`EndgameArchetype`), built on
+ChessCore's FEN + move generation:
 
-if let position = Position(fen: fen) {
+```swift
+import ChessCore   // Position, MoveGenerator
+
+if let position = Position(fen: someEndgameFEN) {
     let legal = MoveGenerator.legalMoves(for: position)
     print("\(legal.count) legal moves for \(position.activeColor)")
 }

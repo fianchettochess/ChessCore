@@ -2,14 +2,13 @@
 
 A portable, **Foundation-only** Swift chess core: the position model, legal move
 generation (with a perft-verified generator), FEN, SAN↔UCI, PGN, an opening book,
-UCI engine-output parsing, and the analysis / storage protocol seams — with no
-Apple-UI dependencies.
+and UCI engine-output parsing — with no Apple-UI dependencies.
 
 ## Why ChessCore
 
 - **Foundation-only.** No SwiftData, CloudKit, GameKit, CoreML, UIKit, AppKit,
-  SwiftUI, Combine, or CoreBluetooth, and no networking. Presentation, storage,
-  and engine access sit behind protocol seams.
+  SwiftUI, Combine, or CoreBluetooth, and no networking. Presentation and engine
+  access sit behind protocol seams.
 - **Wide reach.** Deployment floor declared at **iOS 13 / macOS 10.15** (and the
   code builds down to iOS 11 / macOS 10.10).
 - **Cross-platform.** Builds for `aarch64-unknown-linux-android28` and passes its
@@ -18,15 +17,17 @@ Apple-UI dependencies.
   node counts (initial `perft(4) = 197281`, Kiwipete `perft(3) = 97862`, plus
   en-passant and promotion positions).
 
-## The two layers
+## What's inside
 
-| Layer | Contents |
-|---|---|
-| **Primitives** | `Position` / `Move` / `Square` / `Piece`, `MoveGenerator` (+ perft), FEN, `UCIParser` (SAN↔UCI), `PGNParser` / `PGNExporter`, `OpeningBook`, `UCIOutputParser` / `StockfishInfo` |
-| **Analysis & persistence** | `AccuracyAggregator`, `EndgameArchetype`, `StreakMath`, the storage seam (`JSONBlobStore` / `BlobBackedStore`) |
+The minimal chess machinery: `Position` / `Move` / `Square` / `Piece`,
+`MoveGenerator` (+ perft), FEN, `UCIParser` (SAN↔UCI), `PGNParser` /
+`PGNExporter`, `Game` (the move tree), `OpeningBook`, and `UCIOutputParser` /
+`StockfishInfo`. The `ChessEngine` protocol and `EngineAnalysis` types describe an
+engine abstraction without binding to any concrete engine.
 
-The `ChessEngine` protocol and `EngineAnalysis` types describe an engine
-abstraction without binding to any concrete engine.
+App-specific analysis, stat, and persistence logic — accuracy aggregation,
+endgame archetypes, streak math, and the JSON storage seam — lives a layer up in
+**FianchettoKit**, which depends on ChessCore.
 
 ## A 30-second tour
 
