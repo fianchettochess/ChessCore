@@ -52,6 +52,16 @@ print(position.fen)  // "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3
 - <doc:WorkingWithPositionsAndMoves>
 - <doc:ParsingPGN>
 
+### Guides
+
+- <doc:MoveGeneration>
+- <doc:FENs>
+- <doc:ConvertingMoveNotation>
+- <doc:OpeningBookGuide>
+- <doc:IntegratingAnEngine>
+- <doc:AnalysisMath>
+- <doc:StorageSeam>
+
 ### The board model
 
 - ``Position``
