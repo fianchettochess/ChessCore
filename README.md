@@ -1,108 +1,96 @@
 # ChessCore
 
-The portable, pure-Swift core carved out of the Fianchetto chess app so it can
-be shared by the **Apple app** and the **Android (Skip/SkipFuse) port**.
+A portable, Foundation-only Swift chess library: the position model,
+perft-verified move generation, FEN, SAN/UCI, PGN, a game tree, an opening book,
+and UCI engine-output parsing. It has no Apple-UI or platform dependencies.
 
-**Foundation-only.** No SwiftData, CloudKit, GameKit, CoreML, UIKit, AppKit,
-SwiftUI, Combine, or CoreBluetooth. Those Apple-bound concerns stay app-side
-behind protocol seams (storage, engine-probe, sound/haptics, observation).
+ChessCore provides the chess engine and model only. Higher-level analysis,
+statistics, and persistence are intended to live in separate packages built on
+top of it, keeping the core small, portable, and free of presentation concerns.
 
-This is a **private** package — it carries product IP (tactics extraction,
-repertoire auditing, trap mining, SRS, accuracy/Elo math). Consumed by both apps
-as a local (path) dependency.
+## Features
 
-**Deployment floor:** declared at **iOS 13 / macOS 10.15** (tvOS 13 / watchOS 6 /
-visionOS 1) — independent of Fianchetto's iOS 18.6 / macOS 15.6. The code is pure
-Swift stdlib + Foundation, verified to build down to **iOS 11 / macOS 10.10**, so
-the floor can be lowered to iOS 12 / macOS 10.13 (Swift-ABI-stable line) for
-maximum reach at no API cost if a public release wants it.
+- **Foundation-only.** No SwiftData, CloudKit, GameKit, CoreML, UIKit, AppKit,
+  SwiftUI, Combine, CoreBluetooth, or networking. Presentation and engine access
+  are defined behind protocol seams, and the value types are `Sendable`.
+- **Broad platform support.** A declared deployment target of iOS 13 / macOS
+  10.15 (tvOS 13, watchOS 6, visionOS 1); the source compiles to iOS 11 / macOS
+  10.10, and cross-compiles for Linux and Android
+  (`aarch64-unknown-linux-android28`).
+- **Verified correctness.** Magic-bitboard move generation, validated by a perft
+  suite with exact node counts (initial `perft(5)` = 4,865,609; Kiwipete
+  `perft(4)` = 4,085,603; plus en-passant, promotion, and castling-rights
+  positions).
 
-## Status
+## Contents
 
-Extraction is **in progress**, dependency-ordered. See
-`docs/ANDROID_CARVE_PLAN.md` in the app repo for the full tranche plan, the
-keystone decoupling (splitting `ChessModel` into pure value types + an app-side
-presentation extension), and the per-file decoupling approaches.
+| Area | Types |
+|---|---|
+| Board model | `Position`, `Move`, `Square`, `Piece`, `PieceColor`, `PieceType`, `CastlingRights`, `GameState`, `MoveAnnotation`, `MoveQuality` |
+| Move generation | `MoveGenerator` — legal and pseudo-legal moves, make-move, attack detection, SAN, perft |
+| Game tree | `Game`, `MoveNode` |
+| FEN | `Position(fen:)`, `Position.fen`, `positionKey`, `stockfishSafeFEN` |
+| Notation and PGN | `UCIParser` (SAN/UCI), `PGNParser`, `PGNExporter`, `PGNGame`, `GameTagCodec` |
+| Opening book | `OpeningBook` — ECO lookup and continuations, en-passant-transposition aware |
+| Engine interface | `ChessEngine`, `EngineAnalysis`, `UCIOutputParser`, `StockfishInfo` |
 
-**Landed (tranche 1 — pure leaves):**
-- `StreakMath` — consecutive-correct streak math (current/best run).
-- `DebouncedWriter` — Foundation/Dispatch debounce utility.
+The `ChessEngine` protocol and `EngineAnalysis` types define an engine interface
+independent of any concrete engine. Conforming types may wrap
+[SwiftStockfish](https://github.com/jaredbrewer/SwiftStockfish) or a neural
+network engine.
 
-**Landed (keystone — foundational model):** `ChessModel.swift` — the portable
-value types `PieceColor`, `PieceType`, `Piece`, `Square`, `CastlingRights`,
-`Move`, `MoveRecord`, `MoveAnnotation` (PGN/NAG logic), `MoveQuality`,
-`GameState`, and `Position` (FEN parse/serialize, en-passant, insufficient
-material, `stockfishSafeFEN`, `positionKey`). The iOS presentation that was
-woven into these in the app (SwiftUI `Color`s, SF Symbols, asset names,
-`@Observable` `MoveNode`, localizable text) stays app-side and reattaches as
-extensions at integration time; `MoveNode` also waits on `MoveGenerator`
-(tranche 3).
+## Installation
 
-**Landed (tranche 3 — engine primitives over the model):**
-- `MoveGenerator` — legal/pseudo-legal move generation, make-move, attack
-  detection, SAN. Decoupled for portability: `OSAllocatedUnfairLock` →
-  `NSLock`, the legal-moves cache now keys on `Position.positionKey` (breaking
-  the back-dependency on OpeningBook), and `os.Logger` dropped. Validated by a
-  **perft suite** (exact node counts — initial perft(4)=197281, Kiwipete
-  perft(3)=97862, plus en-passant/promotion positions) that also pins behavior
-  for a future magic-bitboard rewrite.
-- `SharedUtilities` — `Position`/`PieceColor`/`PieceType` extensions
-  (`materialSummary`, `mover(ply:)`, `fenStartsWithWhite`), `EvalJSON`,
-  `PercentFormat`, `Array.capLast`, `TimeInterval.clockString`.
-- `UCIOutputParser` — `StockfishInfo` (UCI `info`/`bestmove` payload, generic to
-  the UCI protocol) + parsing; `os.Logger` dropped.
+Add the package with Swift Package Manager:
 
-**Landed (tranche 4 — notation + book primitives):**
-- `PGNTokenizer` — `PGNGame`/`OrderedTags`, `PGNToken`, `PGNParser`
-  (tokenize/parse/`parseMove`/`Sendable` mainline snapshot), `PGNExporter`
-  token serialization, `MainLineMoveSnapshot`/`ParsedMainLine`.
-- `UCIParser` — SAN↔UCI translation (`uciToMove`/`uciToSAN`/`sanToUCI`/PV→SAN).
-- `GameTagCodec` — escape-safe `key=value;…` PGN-tag codec.
-- `OpeningBook` — ECO lookup + continuations with EP-transposition fallback.
-  Decoupled: `OSAllocatedUnfairLock` → `NSLock`, `os.Logger` dropped, and
-  `Bundle.main` resource loading replaced by injectable
-  `OpeningBook(precomputedData:isPlist:)` / `configureShared(…)` (the app wires
-  its bundle; Android wires its asset).
-- `EngineTypes` — `ChessEngine` engine-probe protocol, `EngineAnalysis`/
-  `ScoredMove`/`Evaluation`, `PlayConfig`, `EngineError`, etc. (`import SwiftUI`
-  → `Foundation`).
+```swift
+.package(url: "https://github.com/jaredbrewer/ChessCore.git", from: "0.1.0")
+```
 
-**Landed (tranche 5 — endgame / traps / ratings / network):**
-- `EndgameArchetype` (procedural endgame FEN generator) + `CustomEndgameConfig`,
-  `OpeningTrap`, `SquareOffSyncGate`, `AccuracyAggregator` (win-probability +
-  per-move accuracy curves) — pure logic over the model/primitives.
-- `TablebaseService`, `LichessExplorer`, `ChessAPIService` (Lichess / Syzygy /
-  Chess.com REST clients). Decoupled: `os.Logger` dropped; networking made
-  portable via `#if canImport(FoundationNetworking)` (URLSession/URLRequest live
-  in `FoundationNetworking` on non-Apple) and a back-deployed
-  `URLSession.dataResult(for:)` (`bytes(for:)`'s AsyncBytes needs iOS 15/macOS
-  12; `dataResult` keeps these on the iOS 13/macOS 10.15 floor + portable to
-  Android).
+Then add `"ChessCore"` to the dependencies of any target that uses it.
 
-All of the above build for `aarch64-unknown-linux-android28` and pass the unit
-tests on macOS. These types are currently **copied** into ChessCore additively
-— the app keeps its own definitions until the integration step (point the iOS
-target at ChessCore via `@_exported import`, then delete the in-app copies).
+## Example
 
-## Intended internal boundary
+```swift
+import ChessCore
 
-- **Primitives** (commodity, could one day become a thin *public* package):
-  move generation, FEN, SAN↔UCI, PGN parse/export, opening book, UCI
-  engine-output parsing, REST clients.
-- **Logic** (differentiated, stays private): tactics extraction, repertoire
-  auditing/punish generation, personal trap mining, SRS/blunder-mastery,
-  accuracy/Elo/streak math, Maia board encoding.
+// Begin from the initial position and play 1. e4.
+var position = Position.initial()
+let e4 = UCIParser.uciToMove("e2e4", in: position)!
+MoveGenerator.applyMoveUnchecked(&position, e4)
 
-Both currently live in one `ChessCore` target; they will split into
-`ChessCorePrimitives` + `ChessCore` once the volume justifies it. Keeping the
-boundary clean now keeps the public-primitives option open at zero cost.
+let replies = MoveGenerator.legalMoves(for: position)               // 20
+let san = MoveGenerator.algebraicNotation(for: e4, in: .initial())  // "e4"
+print(position.fen)
+// rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1
+```
 
-## Build
+`Game` provides a full move tree with variations, navigation, and PGN and FEN
+import and export.
+
+## Building and testing
 
 ```bash
-swift build            # macOS host
-swift test             # run the unit tests
-
-# Android (from a macOS host) — same mechanics as SwiftStockfish:
-# a Swift toolchain matching the Android SDK + the NDK's llvm-ar librarian.
+swift build
+swift test
 ```
+
+The perft suite limits depth in debug builds for fast iteration and runs in full
+under the release configuration:
+
+```bash
+swift test -c release
+```
+
+Cross-compiling for Android from a macOS host requires a Swift toolchain
+matching the Swift Android SDK and the NDK's `llvm-ar` as the librarian.
+
+## Documentation
+
+- API reference (DocC): `Sources/ChessCore/ChessCore.docc`. Generate it with
+  `swift package generate-documentation --target ChessCore`.
+- Guide (Material for MkDocs): `docs-site/`.
+
+## License
+
+ChessCore is available under the MIT license. See [LICENSE](LICENSE).
