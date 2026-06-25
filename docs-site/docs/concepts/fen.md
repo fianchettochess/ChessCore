@@ -1,7 +1,7 @@
 # FEN
 
 ChessCore parses and serializes standard FEN, and exposes three FEN-shaped
-accessors — each for a different job.
+accessors, each suited to a different purpose.
 
 ## Parsing
 
@@ -13,12 +13,6 @@ let position = Position(fen:
 `init(fen:)` is failable. It requires at least the four core fields
 (placement, side, castling, en-passant) and eight ranks, and it recomputes the
 king squares. It returns `nil` on malformed input.
-
-You can also check just the side to move without a full parse:
-
-```swift
-Position.fenStartsWithWhite("rnbq.../w...")   // true (defaults true for malformed)
-```
 
 ## The three accessors
 
@@ -49,9 +43,8 @@ engine.send("go depth 20")
 
 `enPassantTarget` is the raw FEN field. `capturableEnPassantTarget` reports the EP
 square **only when a capture is genuinely available** — the X-FEN / Polyglot
-"real en passant" rule. This is what the opening book uses for transposition
-matching, because two positions that differ only in a phantom EP target should
-be treated as the same position.
+"real en passant" rule. Use it for transposition matching, since two positions
+that differ only in a phantom EP target should be treated as the same position.
 
 ```swift
 if let ep = position.capturableEnPassantTarget {

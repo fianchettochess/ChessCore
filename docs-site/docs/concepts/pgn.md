@@ -1,7 +1,7 @@
 # PGN
 
-ChessCore's PGN support is a few cooperating types: a game model, a parser, a
-token-level exporter, and an escape-safe tag codec.
+ChessCore's PGN support consists of several cooperating types: a game model, a
+parser, a token-level exporter, and an escape-safe tag codec.
 
 | Type | Role |
 |---|---|
@@ -13,7 +13,7 @@ token-level exporter, and an escape-safe tag codec.
 
 ## Parse a PGN string
 
-`PGNParser.parse(_:)` handles a full multi-game PGN — tags plus movetext — and
+`PGNParser.parse(_:)` parses a full multi-game PGN — tags plus movetext — and
 returns one `PGNGame` per game:
 
 ```swift
@@ -38,7 +38,8 @@ print(game.moves)       // ["e4", "e5", "Nf3", "Nc6", "Bb5", ...]
 ```
 
 `PGNGame` exposes convenience accessors (`white`, `black`, `date`, `event`,
-`resultText`, `opening`, `moveCount`) that default cleanly when a tag is missing.
+`resultText`, `opening`, `moveCount`) that return sensible defaults when a tag is
+missing.
 
 ## Ordered tags
 
@@ -53,8 +54,8 @@ for key in game.tags.orderedKeys {          // seven-tag roster first, then the 
 ## Replay a mainline into board snapshots
 
 To follow a game move by move with full positions, replay it into a
-`ParsedMainLine` — a `Sendable` value with a start `Position` and an array of
-`MainLineMoveSnapshot`:
+`ParsedMainLine` — a `Sendable` value containing a starting `Position` and an
+array of `MainLineMoveSnapshot`:
 
 ```swift
 let line: ParsedMainLine = PGNParser.parseMainLineSnapshot(from: game)
@@ -71,12 +72,12 @@ for snap in line.moves {
 
 Each snapshot carries the parsed `Move`, its SAN, the position before and after,
 the `MoveAnnotation` (from `!?`-style suffixes or NAGs), any inline comment, and
-engine eval / best-move / clock data extracted from the comment.
+engine evaluation, best-move, and clock data extracted from the comment.
 
 ### Off the main actor
 
-Both `ParsedMainLine` and `MainLineMoveSnapshot` are `Sendable`, so the heavy
-parse can run on a detached task:
+Both `ParsedMainLine` and `MainLineMoveSnapshot` are `Sendable`, so a large parse
+can run on a detached task:
 
 ```swift
 let snapshot = await Task.detached(priority: .userInitiated) {
@@ -107,8 +108,8 @@ let movetext = PGNExporter.tokenText(from: game)
 
 ## The tag codec
 
-`GameTagCodec` encodes a full PGN tag set as one escape-safe
-`key=value;key=value` string — the storage form Fianchetto persists per game:
+`GameTagCodec` encodes a full PGN tag set as a single escape-safe
+`key=value;key=value` string, suitable for compact per-game storage:
 
 ```swift
 let encoded = GameTagCodec.encode(game.tags)              // "Event=...;White=...;..."
@@ -117,5 +118,5 @@ let dict    = GameTagCodec.decode(encoded)                // unordered [String: 
 let white   = GameTagCodec.firstValue(forKey: "White", in: encoded)
 ```
 
-`decodeOrdered` preserves the original key order for faithful re-export;
-`decode` returns an unordered dictionary for analytics that don't care.
+`decodeOrdered` preserves the original key order for faithful re-export, while
+`decode` returns an unordered dictionary for cases where order is not significant.

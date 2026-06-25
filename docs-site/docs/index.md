@@ -4,7 +4,7 @@ A portable, **Foundation-only** Swift chess core: the position model, legal move
 generation (with a perft-verified generator), FEN, SAN↔UCI, PGN, an opening book,
 and UCI engine-output parsing — with no Apple-UI dependencies.
 
-## Why ChessCore
+## Features
 
 - **Foundation-only.** No SwiftData, CloudKit, GameKit, CoreML, UIKit, AppKit,
   SwiftUI, Combine, or CoreBluetooth, and no networking. Presentation and engine
@@ -17,19 +17,15 @@ and UCI engine-output parsing — with no Apple-UI dependencies.
   node counts (initial `perft(4) = 197281`, Kiwipete `perft(3) = 97862`, plus
   en-passant and promotion positions).
 
-## What's inside
+## Components
 
-The minimal chess machinery: `Position` / `Move` / `Square` / `Piece`,
-`MoveGenerator` (+ perft), FEN, `UCIParser` (SAN↔UCI), `PGNParser` /
+The package provides the core chess types: `Position` / `Move` / `Square` /
+`Piece`, `MoveGenerator` (with perft), FEN, `UCIParser` (SAN↔UCI), `PGNParser` /
 `PGNExporter`, `Game` (the move tree), `OpeningBook`, and `UCIOutputParser` /
 `StockfishInfo`. The `ChessEngine` protocol and `EngineAnalysis` types describe an
 engine abstraction without binding to any concrete engine.
 
-App-specific analysis, stat, and persistence logic — accuracy aggregation,
-endgame archetypes, streak math, and the JSON storage seam — lives a layer up in
-**FianchettoKit**, which depends on ChessCore.
-
-## A 30-second tour
+## Example
 
 ```swift
 import ChessCore
@@ -48,10 +44,10 @@ print(position.fen)
 // "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"
 ```
 
-## Where to next
+## See Also
 
 - [Installation](installation.md) — add ChessCore via Swift Package Manager.
 - [Getting Started](getting-started.md) — positions, moves, and game state.
 - **Concepts** — one page per major area, starting with
   [the board model](concepts/model.md).
-- [Usage Examples](examples.md) — copy-paste recipes.
+- [Usage Examples](examples.md) — task-oriented code samples.

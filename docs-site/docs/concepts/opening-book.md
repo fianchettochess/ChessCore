@@ -17,9 +17,9 @@ let book = OpeningBook(precomputedData: data, isPlist: false)   // failable
 `init(precomputedData:isPlist:)` returns `nil` if the data can't be decoded.
 `OpeningBook()` builds an empty book.
 
-## The shared book
+## Shared instance
 
-For app-wide use, install a process-wide instance once and read it anywhere:
+Install a process-wide instance once at startup and read it from anywhere:
 
 ```swift
 // At startup:
@@ -57,9 +57,9 @@ let name = book.openingName(forECO: "C60")
 let pos = book.findPosition(forOpening: "Ruy Lopez")   // exact, then prefix, then contains
 ```
 
-Lookup is transposition-aware: when a position's en-passant target isn't actually
-capturable, the book retries with the EP square dropped — but it never overrides
-a direct hit.
+Lookup is transposition-aware: when a position's en-passant target is not
+actually capturable, the book retries with the en-passant square dropped. A
+direct hit is never overridden.
 
 ## Continuations
 
@@ -80,12 +80,12 @@ for m in moves {
 }
 ```
 
-Continuations are cached, and each one's resulting opening name / ECO is
-resolved.
+Continuations are cached, and the resulting opening name and ECO code are
+resolved for each move.
 
 ## Position keys
 
-The book exposes the key helpers it uses, in case you want to build your own
+The book exposes the key helpers it uses internally, so you can build a custom
 transposition table on the same canonical form:
 
 ```swift

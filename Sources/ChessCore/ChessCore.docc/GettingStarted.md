@@ -7,7 +7,7 @@ one.
 
 ChessCore is a Swift Package Manager library. It has no third-party runtime
 dependencies — only Foundation — so it builds on every Apple platform from iOS
-13 / macOS 10.15 up, and on Linux/Android for the Skip port.
+13 / macOS 10.15 up, as well as on Linux and Android.
 
 ## Add the package
 
@@ -16,7 +16,7 @@ In your `Package.swift`:
 ```swift
 // As a remote dependency:
 dependencies: [
-    .package(url: "https://github.com/<owner>/ChessCore", from: "1.0.0"),
+    .package(url: "https://github.com/jaredbrewer/ChessCore", from: "0.1.0"),
 ],
 targets: [
     .target(

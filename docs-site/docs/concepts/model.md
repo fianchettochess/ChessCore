@@ -1,6 +1,6 @@
 # The Board Model
 
-The foundational value types. All are `Sendable` and presentation-free —
+The foundational value types. All are `Sendable` and presentation-free:
 colors, glyphs, and asset names are not part of the model and are left to the
 consuming UI.
 
@@ -26,12 +26,6 @@ public enum PieceColor: Equatable, Hashable, Codable, Sendable {
 public enum PieceType: Equatable, Hashable, Codable, Sendable {
     case king, queen, rook, bishop, knight, pawn
 }
-```
-
-A material-summary helper is available:
-
-```swift
-PieceType.materialSummary([.king: 1, .knight: 2, .pawn: 1])   // "K+2N+P"
 ```
 
 ## Piece
@@ -111,8 +105,8 @@ public struct MoveRecord: Sendable {
 
 ## MoveAnnotation
 
-The PGN/NAG glyphs. The chess logic only — display name, symbol, and tint are
-left to the UI:
+The PGN/NAG glyphs. The model covers chess logic only; display name, symbol,
+and tint are left to the UI:
 
 ```swift
 public enum MoveAnnotation: String, Equatable, Hashable, Sendable, CaseIterable {

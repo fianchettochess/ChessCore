@@ -5,15 +5,15 @@ the engine boundary safely with FEN.
 
 ## Overview
 
-This article goes one level deeper than <doc:GettingStarted>: notation
+This article builds on <doc:GettingStarted> and covers notation
 conversion through ``UCIParser``, the perft-based correctness contract on
-``MoveGenerator``, and the FEN accessors that keep a position safe to hand to a
+``MoveGenerator``, and the FEN accessors that keep a position safe to pass to a
 strict UCI engine.
 
 ## SAN ↔ UCI conversion
 
-``UCIParser`` is pure, engine-agnostic translation against a ``Position``. All
-four directions are covered:
+``UCIParser`` performs pure, engine-agnostic translation against a ``Position``.
+It supports all four directions:
 
 ```swift
 let position = Position.initial()
@@ -33,11 +33,11 @@ let sanLine = UCIParser.convertPVToSAN(pv, from: position)
 // ["e4", "e5", "Nf3", "Nc6", "Bb5"]
 ```
 
-`convertPVToSAN` replays along the line and stops at the first move it can't
+`convertPVToSAN` replays along the line and stops at the first move it cannot
 parse, so a truncated or illegal PV yields the longest valid prefix.
 
-If you already have the legal-move list, the cheaper overload skips
-re-generation:
+When the legal-move list is already available, an overload avoids
+regenerating it:
 
 ```swift
 let legal = MoveGenerator.legalMoves(for: position)
@@ -52,8 +52,8 @@ disambiguation, capture `x`, promotion `=Q`, and check `+` / mate `#` suffixes:
 ```swift
 let san = MoveGenerator.algebraicNotation(for: move, in: position)
 
-// If you already generated the legal moves, pass them in to skip the work
-// the disambiguator would otherwise repeat:
+// When the legal moves are already generated, pass them in to avoid
+// the work the disambiguator would otherwise repeat:
 let legal = MoveGenerator.legalMoves(for: position)
 let san2 = MoveGenerator.algebraicNotation(for: move, in: position, legalMoves: legal)
 ```
@@ -61,11 +61,11 @@ let san2 = MoveGenerator.algebraicNotation(for: move, in: position, legalMoves: 
 ## Perft: the move-generation correctness contract
 
 `perft(n)` counts the leaf nodes of the move tree to depth `n`. The exact node
-counts for known positions are the standard way to prove a move generator
-correct (and they pin behavior for any future magic-bitboard rewrite).
+counts for known positions are the standard way to verify a move generator,
+and they pin behavior across future implementation changes.
 
-ChessCore's own test suite checks these; you can reproduce the walk with the
-public API:
+The ChessCore test suite checks these counts. The same walk can be reproduced
+with the public API:
 
 ```swift
 func perft(_ position: Position, depth: Int) -> Int {
@@ -98,9 +98,9 @@ assert(perft(kiwipete, depth: 3) == 97_862)
 > no side effects, so cached values never need invalidation — perft over a
 > transposing tree benefits automatically.
 
-## FEN, and crossing the engine boundary safely
+## FEN and the engine boundary
 
-A ``Position`` exposes three FEN-shaped accessors, each for a different job:
+A ``Position`` exposes three FEN-shaped accessors, each for a distinct purpose:
 
 - ``Position/fen`` — the full standard FEN, including the halfmove and fullmove
   counters. Use it for display, storage, and round-tripping.
@@ -121,15 +121,15 @@ engine.send("go depth 20")
 store.save(position.fen)
 ```
 
-The related ``Position/capturableEnPassantTarget`` reports the EP square *only
-when a capture is genuinely available* (the X-FEN / Polyglot "real en passant"
-rule), which the opening book uses for transposition matching.
+The related ``Position/capturableEnPassantTarget`` reports the en passant square
+*only when a capture is actually available* (the X-FEN / Polyglot "real en
+passant" rule), which is the correct key for transposition matching.
 
 ## Annotating moves
 
-``MoveAnnotation`` models the PGN/NAG glyphs (`!!`, `!`, `?`, `??`, …) without
-any presentation concern. It can read NAG codes and strip suffix glyphs off a
-SAN string:
+``MoveAnnotation`` models the PGN/NAG glyphs (`!!`, `!`, `?`, `??`, …)
+independently of presentation. It reads NAG codes and strips suffix glyphs from
+a SAN string:
 
 ```swift
 let (cleaned, annotation) = MoveAnnotation.extract(from: "Nf3!?")

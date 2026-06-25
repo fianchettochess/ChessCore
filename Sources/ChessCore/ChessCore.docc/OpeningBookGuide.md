@@ -23,9 +23,9 @@ let book = OpeningBook(precomputedData: data, isPlist: false)   // failable
 ``OpeningBook/init(precomputedData:isPlist:)`` returns `nil` if the data can't be
 decoded. ``OpeningBook/init()`` builds an empty book.
 
-## The shared book
+## Shared instance
 
-For app-wide use, install a process-wide instance once with
+For application-wide use, install a process-wide instance once with
 ``OpeningBook/configureShared(precomputedData:isPlist:)`` and read it anywhere
 through ``OpeningBook/shared``:
 
@@ -85,7 +85,7 @@ resolved.
 
 ## Position keys
 
-The book exposes the key helpers it uses, in case you want to build your own
+The book exposes the key helpers it uses, so you can build your own
 transposition table on the same canonical form:
 
 ```swift
