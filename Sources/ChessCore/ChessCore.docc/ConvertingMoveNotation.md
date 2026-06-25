@@ -13,7 +13,7 @@ principal variation as human-readable notation.
 > <doc:IntegratingAnEngine>. ``UCIParser`` is only about move-notation
 > translation.
 
-## All four directions
+## Translating between SAN and UCI
 
 ```swift
 let position = Position.initial()
@@ -47,8 +47,7 @@ let sanLine = UCIParser.convertPVToSAN(pv, from: .initial())
 // ["e4", "e5", "Nf3", "Nc6", "Bb5"]
 ```
 
-This is exactly what you want for rendering an engine's `info … pv …` line as
-human-readable notation.
+Use this to render an engine's `info … pv …` line as human-readable notation.
 
 ## Rendering SAN directly from a Move
 

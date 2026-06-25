@@ -12,20 +12,17 @@ CoreBluetooth, and no networking. Presentation and engine access sit behind
 protocol seams, so the value types are `Sendable` and build everywhere down to
 **iOS 13 / macOS 10.15** (and on Linux/Android).
 
-It is the minimal "chessboard and pieces" core — the chess machinery:
-``Position``/``Move``/``Square``, ``MoveGenerator`` (+ perft), FEN, ``UCIParser``
-(SAN↔UCI), ``Game`` (the move tree), ``PGNParser`` / ``PGNExporter``,
-``OpeningBook``, and ``UCIOutputParser`` / ``StockfishInfo``. App-specific
-analysis, stat, and persistence logic lives a layer up in
-[FianchettoKit](https://github.com/jaredbrewer); the storage and presentation
-concerns stay out of the core.
+It provides the core chess machinery: ``Position``/``Move``/``Square``,
+``MoveGenerator`` (with perft), FEN, ``UCIParser`` (SAN↔UCI), ``Game`` (the move
+tree), ``PGNParser`` / ``PGNExporter``, ``OpeningBook``, and ``UCIOutputParser`` /
+``StockfishInfo``. Storage and presentation concerns stay out of the library.
 
 The ``ChessEngine`` protocol and ``EngineAnalysis`` types describe an engine
-abstraction without binding to any concrete engine — wire up
+abstraction without binding to any concrete engine. Connect
 [SwiftStockfish](https://github.com/jaredbrewer/SwiftStockfish) or a neural engine
 behind it.
 
-### A 30-second tour
+### Example
 
 ```swift
 import ChessCore

@@ -17,7 +17,7 @@ public enum UCIParser {
 }
 ```
 
-## All four directions
+## Conversion methods
 
 ```swift
 let position = Position.initial()
@@ -48,8 +48,8 @@ let sanLine = UCIParser.convertPVToSAN(pv, from: .initial())
 // ["e4", "e5", "Nf3", "Nc6", "Bb5"]
 ```
 
-This is exactly what you want for rendering an engine's `info … pv …` line as
-human-readable notation.
+This is suitable for rendering an engine's `info … pv …` line as human-readable
+notation.
 
 ## Rendering SAN directly from a Move
 
@@ -60,4 +60,4 @@ produces full SAN including disambiguation and check/mate suffixes:
 let san = MoveGenerator.algebraicNotation(for: move, in: position)
 ```
 
-`UCIParser.uciToSAN` is the convenience that does the UCI→Move→SAN chain for you.
+`UCIParser.uciToSAN` performs the UCI→Move→SAN conversion in a single call.

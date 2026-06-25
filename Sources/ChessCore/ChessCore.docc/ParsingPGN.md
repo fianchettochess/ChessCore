@@ -5,7 +5,7 @@ out — including a `Sendable` path that runs off the main actor.
 
 ## Overview
 
-ChessCore's PGN support is split into a few cooperating types:
+ChessCore's PGN support is divided into several cooperating types:
 
 - ``PGNGame`` — one parsed game: ordered tags, the mainline SAN list, the raw
   token stream, and the result.
@@ -75,8 +75,8 @@ comment.
 
 ### Off the main actor
 
-Both ``ParsedMainLine`` and ``MainLineMoveSnapshot`` are `Sendable`, so the heavy
-parse can run on a detached task and the result hand back to the UI:
+Both ``ParsedMainLine`` and ``MainLineMoveSnapshot`` are `Sendable`, so the
+parse can run on a detached task and the result returned to the UI:
 
 ```swift
 let snapshot = await Task.detached(priority: .userInitiated) {
@@ -86,8 +86,8 @@ let snapshot = await Task.detached(priority: .userInitiated) {
 
 ## Parse a single move
 
-To turn one SAN token into a ``Move`` against a position — handy when you're
-driving a board yourself — use ``PGNParser/parseMove(_:in:)``. It handles
+To turn one SAN token into a ``Move`` against a position — useful when driving
+a board directly — use ``PGNParser/parseMove(_:in:)``. It handles
 castling (`O-O` / `0-0`), promotion (`=Q`), disambiguation, and captures, and
 defaults an ambiguous promotion to a queen:
 
@@ -110,7 +110,8 @@ let movetext = PGNExporter.tokenText(from: game)
 ## Round-trip the tag set
 
 ``GameTagCodec`` encodes a full PGN tag set as one escape-safe
-`key=value;key=value` string — the storage form Fianchetto persists for a game:
+`key=value;key=value` string, suitable for persisting a game's tags as a single
+value:
 
 ```swift
 let encoded = GameTagCodec.encode(game.tags)          // "Event=...;White=...;..."

@@ -1,13 +1,13 @@
 # Move Generation and Perft
 
 Generate fully-legal moves, apply them in place, render SAN, detect check, and
-validate the whole thing with perft.
+validate the generator with perft.
 
 ## Overview
 
 ``MoveGenerator`` is a namespace of static functions over a ``Position``: legal
-move generation, move application, SAN notation, and attack detection — all
-backed by a perft suite that pins the generator's correctness.
+move generation, move application, SAN notation, and attack detection. A perft
+test suite verifies the generator's correctness.
 
 ## Legal moves
 
@@ -88,11 +88,11 @@ let san2 = MoveGenerator.algebraicNotation(for: move, in: position, legalMoves: 
 ## Perft: the correctness contract
 
 `perft(n)` counts the leaf nodes of the move tree to depth `n`. Matching the
-known exact counts for standard positions is how a move generator is proven
-correct — and these counts pin behavior for any future magic-bitboard rewrite.
+known exact counts for standard positions is the standard method for proving a
+move generator correct, and these counts guard against regressions.
 
-ChessCore's own test suite checks these; you can reproduce the walk with the
-public API:
+The ChessCore test suite checks these counts. You can reproduce the walk with
+the public API:
 
 ```swift
 func perft(_ position: Position, depth: Int) -> Int {

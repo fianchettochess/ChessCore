@@ -1,12 +1,12 @@
 # Engine Protocol & UCI Output
 
-ChessCore describes an engine abstraction without binding to a concrete engine,
-and it parses generic UCI `info` / `bestmove` output.
+ChessCore defines an engine abstraction that is independent of any concrete
+engine, and it parses generic UCI `info` and `bestmove` output.
 
 ## Parsing UCI output
 
-`UCIOutputParser` turns engine output lines into a structured `StockfishInfo`.
-Despite the name it's generic to the UCI protocol — nothing depends on
+`UCIOutputParser` converts engine output lines into a structured `StockfishInfo`.
+The parser conforms to the UCI protocol and does not depend on any
 Stockfish-specific behavior.
 
 ```swift
@@ -50,7 +50,8 @@ let best = UCIOutputParser.parseBestMove("bestmove e2e4 ponder e7e5")   // "e2e4
 
 ## The ChessEngine protocol
 
-`ChessEngine` is the engine seam — implement it over SwiftStockfish, a neural
+`ChessEngine` is the abstraction that decouples ChessCore from any specific
+engine implementation. Conform a type to it to drive SwiftStockfish, a neural
 engine, or a mock:
 
 ```swift
@@ -145,6 +146,6 @@ public enum EngineError: LocalizedError {
 
 A typical `ChessEngine` adapter drives [SwiftStockfish](https://github.com/jaredbrewer/SwiftStockfish),
 sends `position.stockfishSafeFEN`, collects `info` lines via
-`UCIOutputParser.parseInfo`, and builds `ScoredMove`s with
-`UCIParser.uciToMove` / `MoveGenerator.algebraicNotation`. See the
-[Usage Examples](../examples.md) for a sketch.
+`UCIOutputParser.parseInfo`, and constructs `ScoredMove` values with
+`UCIParser.uciToMove` and `MoveGenerator.algebraicNotation`. See the
+[Usage Examples](../examples.md) for a complete implementation.

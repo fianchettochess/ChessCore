@@ -1,7 +1,7 @@
 # FENs
 
-Parse and serialize standard FEN, and pick the right one of ChessCore's three
-FEN-shaped accessors for the job at hand.
+Parse and serialize standard FEN, and select the appropriate one of ChessCore's
+three FEN-shaped accessors for a given consumer.
 
 ## Overview
 
@@ -21,14 +21,7 @@ let position = Position(fen:
 (placement, side, castling, en passant) and eight ranks, and it recomputes the
 king squares. It returns `nil` on malformed input.
 
-You can also check just the side to move without a full parse using
-`Position.fenStartsWithWhite(_:)`, which defaults to `true` for malformed input:
-
-```swift
-Position.fenStartsWithWhite("rnbq.../ w ...")   // true
-```
-
-## The three accessors
+## FEN accessors
 
 | Accessor | What it contains | Use for |
 |---|---|---|
@@ -41,7 +34,7 @@ print(position.fen)          // "...b KQkq e3 0 1"
 print(position.positionKey)  // "...b KQkq e3"     (no counters)
 ```
 
-## Crossing the engine boundary
+## Sending a FEN to a UCI engine
 
 Stockfish's FEN parser asserts on inconsistent metadata and aborts the process
 (`assert(is_ok(s))`). ``Position/stockfishSafeFEN`` zeros out castling rights

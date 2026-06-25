@@ -1,7 +1,7 @@
 # Usage Examples
 
-Copy-paste recipes that combine the ChessCore pieces. Every snippet uses only the
-public API.
+The following examples combine ChessCore's components into common tasks. Every
+snippet uses only the public API.
 
 ## Play a full game from a UCI move list
 
@@ -87,9 +87,9 @@ func openingName(after uciMoves: [String]) -> String? {
 print(openingName(after: ["e2e4", "e7e5", "g1f3", "b8c6", "f1b5"]))  // "Ruy Lopez"
 ```
 
-## A minimal ChessEngine over UCI output
+## Build an EngineAnalysis from UCI output
 
-A sketch of an engine adapter that consumes raw UCI `info` lines (e.g. from a
+The following engine adapter consumes raw UCI `info` lines (for example, from a
 SwiftStockfish stream) and produces an `EngineAnalysis`:
 
 ```swift
@@ -137,10 +137,10 @@ func buildAnalysis(
 }
 ```
 
-## Generate an endgame to drill
+## Load a position from FEN
 
-Endgame generation lives in **FianchettoKit** (`EndgameArchetype`), built on
-ChessCore's FEN + move generation:
+A position loaded from a FEN string can be queried directly with ChessCore's move
+generation:
 
 ```swift
 import ChessCore   // Position, MoveGenerator
