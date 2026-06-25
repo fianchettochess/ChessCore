@@ -1,0 +1,48 @@
+name: CI
+
+# Build and test ChessCore on macOS and Linux, and run the full perft oracle
+# under the release configuration. ChessCore is pure Swift + Foundation, so the
+# unit tests (including perft) are self-contained and run on every platform.
+# There is no binary artifact, and therefore no release workflow.
+
+on:
+  push:
+  pull_request:
+
+# Cancel superseded runs on the same ref to save CI minutes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    name: macOS
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: swift build
+      - name: Test
+        run: swift test
+
+  linux:
+    name: Linux
+    runs-on: ubuntu-latest
+    container: swift:latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: swift build
+      - name: Test
+        run: swift test
+
+  perft:
+    name: Perft oracle (release)
+    runs-on: ubuntu-latest
+    container: swift:latest
+    steps:
+      - uses: actions/checkout@v4
+      # Deep perft depths are node-budget-gated in debug builds for fast local
+      # iteration; the release configuration runs the full exact-node-count oracle.
+      - name: Perft (release)
+        run: swift test -c release --filter MoveGeneratorTests
