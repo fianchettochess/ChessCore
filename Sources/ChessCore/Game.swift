@@ -231,6 +231,62 @@ public final class Game {
         bumpTreeMutation()
     }
 
+    // MARK: - Reconciliation (history-preserving position correction)
+
+    /// Reconcile the game to the board state of `target` WITHOUT discarding move
+    /// history when possible.
+    ///
+    /// If `target`'s piece placement and side-to-move are reachable from the current
+    /// `position` by a short sequence of legal moves (≤ `maxPly`), those moves are
+    /// applied through the tree (so `rootChildren` / `moveHistory` survive and simply
+    /// extend) and `true` is returned. Returns `false` with **no mutation** when the
+    /// target isn't reachable within `maxPly` — the caller can then decide whether to
+    /// hard-reset via `loadFEN`.
+    ///
+    /// Useful whenever an external source of truth for the *position* (a sensing
+    /// board, a remote game feed, a re-scanned diagram) runs ahead of the recorded
+    /// line and the history must be caught up rather than thrown away. Matching is on
+    /// placement + side-to-move (the observable board state); the applied moves derive
+    /// the exact castling / en-passant rights, so the resulting tree position is
+    /// internally consistent regardless of the target FEN's metadata fields.
+    @discardableResult
+    public func reconcile(toPlacementOf target: Position, maxPly: Int = 4) -> Bool {
+        func placementKey(_ p: Position) -> String {
+            let parts = p.fen.split(separator: " ")
+            let placement = parts.first.map(String.init) ?? ""
+            let sideToMove = parts.count >= 2 ? String(parts[1]) : ""
+            return placement + " " + sideToMove
+        }
+
+        let targetKey = placementKey(target)
+        if placementKey(position) == targetKey { return true }   // already in sync
+
+        // Breadth-first over legal-move sequences, deduped by placement so the search
+        // stays small even at the default depth.
+        var frontier: [(pos: Position, path: [Move])] = [(position, [])]
+        var seen: Set<String> = [placementKey(position)]
+        for _ in 0..<max(0, maxPly) {
+            var next: [(pos: Position, path: [Move])] = []
+            for (pos, path) in frontier {
+                for move in MoveGenerator.legalMoves(for: pos) {
+                    var advanced = pos
+                    MoveGenerator.applyMoveUnchecked(&advanced, move)
+                    let key = placementKey(advanced)
+                    if key == targetKey {
+                        for m in path + [move] { apply(m) }   // commit through the tree
+                        return true
+                    }
+                    if seen.insert(key).inserted {
+                        next.append((advanced, path + [move]))
+                    }
+                }
+            }
+            frontier = next
+            if frontier.isEmpty { break }
+        }
+        return false
+    }
+
     // MARK: - Tree editing
 
     public func setAnnotation(_ annotation: MoveAnnotation?, on node: MoveNode) {
