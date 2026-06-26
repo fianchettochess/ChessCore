@@ -6,7 +6,7 @@ public protocol ChessEngine: AnyObject {
     func analyze(position: Position, topK: Int) async throws -> EngineAnalysis
 }
 
-public struct EngineAnalysis {
+public nonisolated struct EngineAnalysis: Sendable {
     public let topMoves: [ScoredMove]
     public let evaluation: Evaluation?
     public let depth: Int?
@@ -17,7 +17,7 @@ public struct EngineAnalysis {
         self.depth = depth
     }
 
-    public struct ScoredMove: Identifiable {
+    public nonisolated struct ScoredMove: Identifiable, Sendable {
         /// Stable identity across engine publishes: a fresh UUID per
         /// publish made every list row "new" on each 10Hz analysis
         /// update, forcing full row diff/animation churn. SAN notation
@@ -40,7 +40,7 @@ public struct EngineAnalysis {
         }
     }
 
-    public enum Evaluation: Equatable {
+    public nonisolated enum Evaluation: Equatable, Sendable {
         case winDrawLoss(win: Double, draw: Double, loss: Double)
         case centipawns(Int)
         case mate(Int)
