@@ -28,10 +28,10 @@ public nonisolated struct EngineAnalysis: Sendable {
         public let move: Move
         public let notation: String
         public let probability: Double
-        public let score: StockfishInfo.Score?
+        public let score: UCIInfo.Score?
         public let pvLine: [String]
 
-        public init(move: Move, notation: String, probability: Double, score: StockfishInfo.Score? = nil, pvLine: [String] = []) {
+        public init(move: Move, notation: String, probability: Double, score: UCIInfo.Score? = nil, pvLine: [String] = []) {
             self.move = move
             self.notation = notation
             self.probability = probability
@@ -129,18 +129,18 @@ public struct GuessEloResult {
 
 public struct PositionEval {
     public let bestMoveUCI: String
-    public let scores: [Int: StockfishInfo.Score]
+    public let scores: [Int: UCIInfo.Score]
 
-    public init(bestMoveUCI: String, scores: [Int: StockfishInfo.Score]) {
+    public init(bestMoveUCI: String, scores: [Int: UCIInfo.Score]) {
         self.bestMoveUCI = bestMoveUCI
         self.scores = scores
     }
 
-    public var bestScore: StockfishInfo.Score {
+    public var bestScore: UCIInfo.Score {
         scores[1] ?? .cp(0)
     }
 
-    public var secondBestScore: StockfishInfo.Score? {
+    public var secondBestScore: UCIInfo.Score? {
         scores[2]
     }
 }

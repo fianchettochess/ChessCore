@@ -6,7 +6,7 @@ import Foundation
 /// Stockfish because that's the engine that emits these, but the
 /// shape is generic to the UCI protocol; nothing here depends on
 /// Stockfish-specific behaviour.
-public nonisolated struct StockfishInfo: Sendable {
+public nonisolated struct UCIInfo: Sendable {
     public var depth: Int = 0
     public var score: Score = .cp(0)
     public var pv: [String] = []
@@ -69,7 +69,7 @@ public nonisolated struct StockfishInfo: Sendable {
 // pulling in the C++ bridge.
 
 public nonisolated enum UCIOutputParser {
-    public static func parseInfo(_ line: String) -> StockfishInfo? {
+    public static func parseInfo(_ line: String) -> UCIInfo? {
         guard line.hasPrefix("info "), line.contains(" pv ") else { return nil }
         // Bounded scores (`lowerbound`/`upperbound`) are partial results from an
         // unresolved aspiration window — the true eval is only known to be
@@ -77,7 +77,7 @@ public nonisolated enum UCIOutputParser {
         // arrows; the resolved (unbounded) line for that depth follows shortly.
         // (eval-bar fix 2026-06-23)
         if line.contains(" lowerbound") || line.contains(" upperbound") { return nil }
-        var info = StockfishInfo()
+        var info = UCIInfo()
         let tokens = line.split(separator: " ").map(String.init)
 
         var i = 0
