@@ -2,24 +2,110 @@ import Foundation
 
 // MARK: - UCI `info` / `bestmove` payload
 
-/// `Sendable` struct mirroring a single UCI `info` line. Named for
-/// Stockfish because that's the engine that emits these, but the
-/// shape is generic to the UCI protocol; nothing here depends on
-/// Stockfish-specific behaviour.
-public nonisolated struct UCIInfo: Sendable {
-    public var depth: Int = 0
-    public var score: Score = .cp(0)
-    public var pv: [String] = []
-    public var multiPV: Int = 1
+/// A structured snapshot of a single UCI `info` line — the ONE canonical UCI
+/// type for the whole codebase. The iOS app, the Android (Skip) port, and
+/// FianchettoKit's kernels all use it; FianchettoKit re-exports it as
+/// `UCIInfoLine` and its parser as `UCIInfoParser` for source compatibility.
+///
+/// Storage is the kernel/Android shape (`scoreCp` + `mateIn` optionals); the
+/// `.score` `Score`-enum view is provided (get+set) for the iOS API. Scores are
+/// engine-POV (positive = good for the side to move) until normalized to
+/// White-POV via `whitePovCp(_:sideToMoveIsWhite:)` / `whitePovMate(_:…)`.
+public nonisolated struct UCIInfo: Sendable, Equatable {
+    /// Depth completed by the engine for this line.
+    public var depth: Int?
+    /// MultiPV rank (1 = best move, 2 = second-best, …).
+    public var multipv: Int?
+    /// Engine-POV centipawns (nil when the score is a forced mate).
+    public var scoreCp: Int?
+    /// Signed forced-mate distance (engine-POV). Positive = current mover
+    /// mates; negative = current mover is mated.
+    public var mateIn: Int?
+    /// Nodes-per-second search rate reported by the engine.
+    public var nps: Int?
+    /// Principal variation — a list of UCI move strings (e.g. `"e2e4"`).
+    public var pv: [String]
 
-    public init(depth: Int = 0, score: Score = .cp(0), pv: [String] = [], multiPV: Int = 1) {
+    public init(
+        depth: Int? = nil,
+        multipv: Int? = nil,
+        scoreCp: Int? = nil,
+        mateIn: Int? = nil,
+        nps: Int? = nil,
+        pv: [String] = []
+    ) {
         self.depth = depth
-        self.score = score
+        self.multipv = multipv
+        self.scoreCp = scoreCp
+        self.mateIn = mateIn
+        self.nps = nps
         self.pv = pv
-        self.multiPV = multiPV
     }
 
-    public enum Score: Sendable {
+    // MARK: - Score-enum view (iOS API)
+
+    /// The score as a unified `.cp`/`.mate` enum. Getter derives it from
+    /// `scoreCp`/`mateIn`; setter writes them back. Lets the iOS call sites
+    /// keep using `info.score` while storage stays the kernel shape.
+    public var score: Score {
+        get {
+            if let m = mateIn { return .mate(m) }
+            return .cp(scoreCp ?? 0)
+        }
+        set {
+            switch newValue {
+            case .cp(let c): scoreCp = c; mateIn = nil
+            case .mate(let m): mateIn = m; scoreCp = nil
+            }
+        }
+    }
+
+    /// iOS spelling of `multipv` (defaults to 1 when absent).
+    public var multiPV: Int {
+        get { multipv ?? 1 }
+        set { multipv = newValue }
+    }
+
+    /// Best move from this position, i.e. the first token of the PV.
+    public var bestMoveUCI: String? { pv.first }
+
+    // MARK: - Derived score helpers
+
+    /// Engine-POV centipawns treating a forced mate as ±100 000.
+    public var centipawns: Int {
+        if let m = mateIn { return m > 0 ? 100_000 : -100_000 }
+        return scoreCp ?? 0
+    }
+
+    /// White-POV centipawn value. Flips sign when the side to move is Black.
+    public static func whitePovCp(_ cp: Int, sideToMoveIsWhite: Bool) -> Int {
+        sideToMoveIsWhite ? cp : -cp
+    }
+
+    /// White-POV mate distance. Positive = White mates; negative = Black mates.
+    public static func whitePovMate(_ mate: Int, sideToMoveIsWhite: Bool) -> Int {
+        sideToMoveIsWhite ? mate : -mate
+    }
+
+    /// White-POV centipawns using this line's own score (mate → ±100 000).
+    public func whitePovCentipawns(sideToMoveIsWhite: Bool) -> Int {
+        UCIInfo.whitePovCp(centipawns, sideToMoveIsWhite: sideToMoveIsWhite)
+    }
+
+    /// Win probability for the side to move (logistic model, Stockfish's
+    /// published constant 0.00368208 — a general, public eval-math formula).
+    /// Mate scores map to 1.0 (mover wins) or 0.0 (mover is mated).
+    public var winProbability: Double {
+        if let m = mateIn { return m > 0 ? 1.0 : 0.0 }
+        return 1.0 / (1.0 + exp(-0.00368208 * Double(scoreCp ?? 0)))
+    }
+
+    /// Human-readable eval string: `"+1.34"` / `"-0.21"` / `"M5"` / `"-M3"`.
+    public var displayText: String { score.displayText }
+
+    // MARK: - Score
+
+    public enum Score: Sendable, Equatable {
         case cp(Int)
         case mate(Int)
 
@@ -30,22 +116,20 @@ public nonisolated struct UCIInfo: Sendable {
             }
         }
 
+        /// `"+1.34"` (two decimals) / `"M5"` / `"-M3"`. Two-decimal precision
+        /// is the canonical eval format (matches `FianchettoKit.EvalFormat`);
+        /// resolves the former 1dp/2dp drift.
         public var displayText: String {
             switch self {
-            case .cp(let cp):
-                let value = Double(cp) / 100.0
-                return String(format: "%+.1f", value)
-            case .mate(let m):
-                return m > 0 ? "M\(m)" : "-M\(abs(m))"
+            case .cp(let cp): return UCIInfo.formatCentipawns(cp)
+            case .mate(let m): return m > 0 ? "M\(m)" : "-M\(abs(m))"
             }
         }
 
         public var winProbability: Double {
             switch self {
-            case .cp(let cp):
-                return 1.0 / (1.0 + exp(-0.00368208 * Double(cp)))
-            case .mate(let m):
-                return m > 0 ? 1.0 : 0.0
+            case .cp(let cp): return 1.0 / (1.0 + exp(-0.00368208 * Double(cp)))
+            case .mate(let m): return m > 0 ? 1.0 : 0.0
             }
         }
 
@@ -58,76 +142,87 @@ public nonisolated struct UCIInfo: Sendable {
             }
         }
     }
+
+    /// Sign-prefixed two-decimal centipawn format via integer arithmetic
+    /// (no float rounding): `134 → "+1.34"`, `-21 → "-0.21"`, `5 → "+0.05"`.
+    static func formatCentipawns(_ cp: Int) -> String {
+        let sign = cp < 0 ? "-" : "+"
+        let a = abs(cp)
+        return "\(sign)\(a / 100).\(String(format: "%02d", a % 100))"
+    }
 }
 
-// MARK: - Output parsing
-//
-// Parses Stockfish-specific output formats — `info ...` and
-// `bestmove ...` lines. Pure logic with no engine dep; lives here
-// instead of inside `StockfishEngine.swift` so the perf harness
-// (and any future non-Stockfish consumer) can use it without
-// pulling in the C++ bridge.
+// MARK: - UCIOutputParser
 
+/// Pure-logic parser for UCI engine output. Converts `info …` and `bestmove …`
+/// lines into `UCIInfo` values. No engine dependency, so the perf harness and
+/// any non-Stockfish consumer can use it without the C++ bridge.
+///
+/// Resolved behaviours (folded up from the former per-platform copies):
+/// - Discards bounded (`lowerbound`/`upperbound`) scores — aspiration-window
+///   artefacts whose true eval is only known to be above/below the number.
+/// - Does NOT require a `pv` token, so score-only probe lines still parse.
+/// - Parses `nps`.
+/// - `parseBestMove` treats `bestmove (none)` as `nil` (terminal position).
 public nonisolated enum UCIOutputParser {
-    public static func parseInfo(_ line: String) -> UCIInfo? {
-        guard line.hasPrefix("info "), line.contains(" pv ") else { return nil }
-        // Bounded scores (`lowerbound`/`upperbound`) are partial results from an
-        // unresolved aspiration window — the true eval is only known to be
-        // above/below the printed number. Don't let them drive the eval bar /
-        // arrows; the resolved (unbounded) line for that depth follows shortly.
-        // (eval-bar fix 2026-06-23)
-        if line.contains(" lowerbound") || line.contains(" upperbound") { return nil }
-        var info = UCIInfo()
-        let tokens = line.split(separator: " ").map(String.init)
 
-        var i = 0
+    /// Parse a single engine output line. Returns a `UCIInfo` for `info …`
+    /// lines; `nil` for anything else (`bestmove`, `readyok`, blanks, …).
+    public static func parseInfo(_ line: String) -> UCIInfo? {
+        let tokens = line.split(separator: " ").map(String.init)
+        guard tokens.first == "info" else { return nil }
+        if line.contains("lowerbound") || line.contains("upperbound") { return nil }
+
+        var result = UCIInfo()
+        var i = 1
         while i < tokens.count {
             switch tokens[i] {
             case "depth":
-                i += 1
-                if i < tokens.count {
-                    info.depth = parsedInt(tokens[i], fallback: 0)
-                }
+                if i + 1 < tokens.count { result.depth = Int(tokens[i + 1]) }
+                i += 2
             case "multipv":
-                i += 1
-                if i < tokens.count {
-                    info.multiPV = parsedInt(tokens[i], fallback: 1)
-                }
+                if i + 1 < tokens.count { result.multipv = Int(tokens[i + 1]) }
+                i += 2
+            case "nps":
+                if i + 1 < tokens.count { result.nps = Int(tokens[i + 1]) }
+                i += 2
             case "score":
-                i += 1
-                if i < tokens.count {
-                    if tokens[i] == "cp" {
-                        i += 1
-                        if i < tokens.count {
-                            info.score = .cp(parsedInt(tokens[i], fallback: 0))
-                        }
-                    } else if tokens[i] == "mate" {
-                        i += 1
-                        if i < tokens.count {
-                            info.score = .mate(parsedInt(tokens[i], fallback: 0))
-                        }
-                    }
+                if i + 2 < tokens.count {
+                    let kind = tokens[i + 1]
+                    let value = Int(tokens[i + 2])
+                    if kind == "cp" { result.scoreCp = value }
+                    else if kind == "mate" { result.mateIn = value }
                 }
+                i += 3
             case "pv":
-                info.pv = Array(tokens[(i + 1)...])
+                if i + 1 < tokens.count { result.pv = Array(tokens[(i + 1)...]) }
                 i = tokens.count
-            default: break
+            default:
+                i += 1
             }
-            i += 1
         }
-        return info
+        return result
     }
 
+    /// Alias for `parseInfo(_:)` — the name used by the FianchettoKit/Android
+    /// call sites that collapsed onto this parser.
+    public static func parse(_ line: String) -> UCIInfo? { parseInfo(line) }
+
+    /// Extract the move from a `bestmove <uci> [ponder <uci>]` line. Returns
+    /// `nil` for any other line, or when the engine reports `bestmove (none)`.
     public static func parseBestMove(_ line: String) -> String? {
-        guard line.hasPrefix("bestmove ") else { return nil }
-        let parts = line.split(separator: " ")
-        return parts.count >= 2 ? String(parts[1]) : nil
+        let tokens = line.split(separator: " ").map(String.init)
+        guard tokens.first == "bestmove", tokens.count >= 2 else { return nil }
+        let move = tokens[1]
+        return move == "(none)" ? nil : move
     }
 
-    /// Falls back to a default when the token isn't a valid integer, so a
-    /// malformed engine line evaluates as the fallback rather than aborting.
-    /// (The app's os.Logger diagnostic was dropped here — logging is app-side.)
-    private static func parsedInt(_ token: String, fallback: Int) -> Int {
-        Int(token) ?? fallback
+    /// Distil a batch of `UCIInfo` values (e.g. from a MultiPV search) into a
+    /// dictionary keyed by MultiPV rank, keeping the LAST (highest-depth) entry
+    /// per rank. Lines without a `multipv` field default to rank 1.
+    public static func bestInfoByRank(_ infos: [UCIInfo]) -> [Int: UCIInfo] {
+        var best: [Int: UCIInfo] = [:]
+        for info in infos { best[info.multipv ?? 1] = info }
+        return best
     }
 }
