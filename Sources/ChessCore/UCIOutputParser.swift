@@ -100,7 +100,8 @@ public nonisolated struct UCIInfo: Sendable, Equatable {
         return 1.0 / (1.0 + exp(-0.00368208 * Double(scoreCp ?? 0)))
     }
 
-    /// Human-readable eval string: `"+1.34"` / `"-0.21"` / `"M5"` / `"-M3"`.
+    /// Human-readable eval string: `"+1.3"` / `"-0.2"` / `"M5"` / `"-M3"` —
+    /// one decimal place, matching the pre-existing iOS `UCIInfo.Score` format.
     public var displayText: String { score.displayText }
 
     // MARK: - Score
@@ -116,12 +117,16 @@ public nonisolated struct UCIInfo: Sendable, Equatable {
             }
         }
 
-        /// `"+1.34"` (two decimals) / `"M5"` / `"-M3"`. Two-decimal precision
-        /// is the canonical eval format (matches `FianchettoKit.EvalFormat`);
-        /// resolves the former 1dp/2dp drift.
+        /// `"+1.3"` (one decimal) / `"M5"` / `"-M3"`. One decimal place is the
+        /// pre-existing iOS `UCIInfo.Score` precision (matches
+        /// `FianchettoKit.EvalFormat.formatCentipawnsShort`). Integer
+        /// arithmetic keeps it SkipFoundation-safe.
         public var displayText: String {
             switch self {
-            case .cp(let cp): return UCIInfo.formatCentipawns(cp)
+            case .cp(let cp):
+                let sign = cp < 0 ? "-" : "+"
+                let a = abs(cp)
+                return "\(sign)\(a / 100).\((a % 100) / 10)"
             case .mate(let m): return m > 0 ? "M\(m)" : "-M\(abs(m))"
             }
         }
@@ -143,13 +148,6 @@ public nonisolated struct UCIInfo: Sendable, Equatable {
         }
     }
 
-    /// Sign-prefixed two-decimal centipawn format via integer arithmetic
-    /// (no float rounding): `134 → "+1.34"`, `-21 → "-0.21"`, `5 → "+0.05"`.
-    static func formatCentipawns(_ cp: Int) -> String {
-        let sign = cp < 0 ? "-" : "+"
-        let a = abs(cp)
-        return "\(sign)\(a / 100).\(String(format: "%02d", a % 100))"
-    }
 }
 
 // MARK: - UCIOutputParser
