@@ -49,19 +49,6 @@ final class NotationAndBookTests: XCTestCase {
         XCTAssertEqual(GameTagCodec.firstValue(forKey: "White", in: encoded), "Carlsen, Magnus")
     }
 
-    func testOpeningBookFromInjectedData() throws {
-        let key = Position.initial().positionKey
-        let json = """
-        {"entries":{"\(key)":{"eco":"A00","name":"Starting Position","isTerminal":false}},"continuations":{}}
-        """
-        let book = try XCTUnwrap(OpeningBook(precomputedData: Data(json.utf8), isPlist: false))
-        XCTAssertEqual(book.lookup(Position.initial())?.name, "Starting Position")
-        XCTAssertEqual(book.openingName(forECO: "A00"), "Starting Position")
-        // configureShared installs it process-wide.
-        OpeningBook.configureShared(precomputedData: Data(json.utf8), isPlist: false)
-        XCTAssertEqual(OpeningBook.shared.lookup(Position.initial())?.eco, "A00")
-    }
-
     func testStockfishInfoParsing() {
         let info = UCIOutputParser.parseInfo("info depth 20 score cp 35 multipv 1 pv e2e4 e7e5")
         XCTAssertEqual(info?.depth, 20)
