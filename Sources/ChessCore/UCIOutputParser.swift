@@ -92,14 +92,6 @@ public nonisolated struct UCIInfo: Sendable, Equatable {
         UCIInfo.whitePovCp(centipawns, sideToMoveIsWhite: sideToMoveIsWhite)
     }
 
-    /// Win probability for the side to move (logistic model, Stockfish's
-    /// published constant 0.00368208 — a general, public eval-math formula).
-    /// Mate scores map to 1.0 (mover wins) or 0.0 (mover is mated).
-    public var winProbability: Double {
-        if let m = mateIn { return m > 0 ? 1.0 : 0.0 }
-        return 1.0 / (1.0 + exp(-0.00368208 * Double(scoreCp ?? 0)))
-    }
-
     /// Human-readable eval string: `"+1.3"` / `"-0.2"` / `"M5"` / `"-M3"` —
     /// one decimal place, matching the pre-existing iOS `UCIInfo.Score` format.
     public var displayText: String { score.displayText }
@@ -130,15 +122,6 @@ public nonisolated struct UCIInfo: Sendable, Equatable {
             case .mate(let m): return m > 0 ? "M\(m)" : "-M\(abs(m))"
             }
         }
-
-        public var winProbability: Double {
-            switch self {
-            case .cp(let cp): return 1.0 / (1.0 + exp(-0.00368208 * Double(cp)))
-            case .mate(let m): return m > 0 ? 1.0 : 0.0
-            }
-        }
-
-        public var whiteWinProbability: Double { winProbability }
 
         public var negated: Score {
             switch self {

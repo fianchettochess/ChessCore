@@ -56,18 +56,6 @@ public nonisolated struct EngineAnalysis: Sendable {
             }
         }
 
-        public var whiteWinProbability: Double {
-            switch self {
-            case .winDrawLoss(let w, _, let l):
-                let total = w + l
-                return total > 0 ? w / total : 0.5
-            case .centipawns(let cp):
-                return 1.0 / (1.0 + exp(-0.00368208 * Double(cp)))
-            case .mate(let m):
-                return m > 0 ? 1.0 : 0.0
-            }
-        }
-
         public var scoreText: String {
             switch self {
             case .centipawns(let cp):
@@ -79,24 +67,6 @@ public nonisolated struct EngineAnalysis: Sendable {
                 return String(format: "%+.0f%%", diff * 100)
             }
         }
-    }
-}
-
-public struct PositionEval {
-    public let bestMoveUCI: String
-    public let scores: [Int: UCIInfo.Score]
-
-    public init(bestMoveUCI: String, scores: [Int: UCIInfo.Score]) {
-        self.bestMoveUCI = bestMoveUCI
-        self.scores = scores
-    }
-
-    public var bestScore: UCIInfo.Score {
-        scores[1] ?? .cp(0)
-    }
-
-    public var secondBestScore: UCIInfo.Score? {
-        scores[2]
     }
 }
 
