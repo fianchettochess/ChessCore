@@ -330,38 +330,7 @@ public nonisolated struct Position: Equatable, Sendable {
     }
 
     public var positionKey: String {
-        var result = ""
-        result.reserveCapacity(72)
-
-        for rank in stride(from: 7, through: 0, by: -1) {
-            if rank < 7 { result += "/" }
-            var empty = 0
-            for file in 0..<8 {
-                if let piece = board[rank * 8 + file] {
-                    if empty > 0 { result += "\(empty)"; empty = 0 }
-                    result += piece.fenChar
-                } else {
-                    empty += 1
-                }
-            }
-            if empty > 0 { result += "\(empty)" }
-        }
-
-        result += " "
-        result += activeColor == .white ? "w" : "b"
-        result += " "
-
-        var hasCastling = false
-        if castlingRights.whiteKingside { result += "K"; hasCastling = true }
-        if castlingRights.whiteQueenside { result += "Q"; hasCastling = true }
-        if castlingRights.blackKingside { result += "k"; hasCastling = true }
-        if castlingRights.blackQueenside { result += "q"; hasCastling = true }
-        if !hasCastling { result += "-" }
-
-        result += " "
-        result += enPassantTarget?.algebraic ?? "-"
-
-        return result
+        return fen.split(separator: " ").prefix(4).joined(separator: " ")
     }
 
     public init?(fen: String) {
