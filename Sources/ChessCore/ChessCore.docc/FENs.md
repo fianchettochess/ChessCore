@@ -57,9 +57,8 @@ Use the plain ``Position/fen`` for storage and display.
 ``Position/enPassantTarget`` is the raw FEN field.
 ``Position/capturableEnPassantTarget`` reports the EP square **only when a
 capture is genuinely available** — the X-FEN / Polyglot "real en passant" rule.
-This is what ``OpeningBook`` uses for transposition matching, because two
-positions that differ only in a phantom EP target should be treated as the same
-position.
+This is used for transposition matching, because two positions that differ only
+in a phantom EP target should be treated as the same position.
 
 ```swift
 if let ep = position.capturableEnPassantTarget {
