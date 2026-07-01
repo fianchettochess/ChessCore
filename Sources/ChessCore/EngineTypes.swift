@@ -82,51 +82,6 @@ public nonisolated struct EngineAnalysis: Sendable {
     }
 }
 
-public struct GameAnalysis {
-    public struct MoveResult {
-        public let moveIndex: Int
-        public let playerMoveRank: Int
-        public let playerMoveProbability: Double
-
-        public init(moveIndex: Int, playerMoveRank: Int, playerMoveProbability: Double) {
-            self.moveIndex = moveIndex
-            self.playerMoveRank = playerMoveRank
-            self.playerMoveProbability = playerMoveProbability
-        }
-    }
-
-    public let moveResults: [MoveResult]
-
-    public init(moveResults: [MoveResult]) {
-        self.moveResults = moveResults
-    }
-
-    public var accuracy: Double {
-        guard !moveResults.isEmpty else { return 0 }
-        return Double(moveResults.filter { $0.playerMoveRank == 0 }.count) / Double(moveResults.count)
-    }
-
-    public var top3Accuracy: Double {
-        guard !moveResults.isEmpty else { return 0 }
-        return Double(moveResults.filter { (0..<3).contains($0.playerMoveRank) }.count) / Double(moveResults.count)
-    }
-
-    public var averageProbability: Double {
-        guard !moveResults.isEmpty else { return 0 }
-        return moveResults.map(\.playerMoveProbability).reduce(0, +) / Double(moveResults.count)
-    }
-}
-
-public struct GuessEloResult {
-    public let whiteElo: Int?
-    public let blackElo: Int?
-
-    public init(whiteElo: Int?, blackElo: Int?) {
-        self.whiteElo = whiteElo
-        self.blackElo = blackElo
-    }
-}
-
 public struct PositionEval {
     public let bestMoveUCI: String
     public let scores: [Int: UCIInfo.Score]
@@ -142,24 +97,6 @@ public struct PositionEval {
 
     public var secondBestScore: UCIInfo.Score? {
         scores[2]
-    }
-}
-
-public struct PlayConfig: Equatable {
-    public enum Engine: String, CaseIterable {
-        case maia = "Maia"
-        case stockfish = "Stockfish"
-    }
-    public enum PlayerColor: String, CaseIterable {
-        case white = "White"
-        case black = "Black"
-    }
-    public var engine: Engine
-    public var playerColor: PlayerColor
-
-    public init(engine: Engine, playerColor: PlayerColor) {
-        self.engine = engine
-        self.playerColor = playerColor
     }
 }
 
