@@ -181,10 +181,7 @@ public nonisolated struct OpeningBook: Sendable {
     }
 
     public static func positionKey(_ pos: Position) -> String {
-        let fen = pos.fen
-        let parts = fen.split(separator: " ")
-        guard parts.count >= 4 else { return fen }
-        return "\(parts[0]) \(parts[1]) \(parts[2]) \(parts[3])"
+        return pos.positionKey
     }
 
     private static func replayMoves(_ sans: [String]) -> Position? {
