@@ -8,17 +8,17 @@ ChessCore's engine abstraction without binding to a concrete backend.
 ChessCore describes an engine seam — the ``ChessEngine`` protocol and the
 ``EngineAnalysis`` result types — without binding to any concrete engine, and it
 parses generic UCI `info` / `bestmove` output through ``UCIOutputParser`` into a
-structured ``StockfishInfo``.
+structured ``UCIInfo``.
 
 ## Parsing UCI output
 
-``UCIOutputParser`` turns engine output lines into a structured ``StockfishInfo``.
+``UCIOutputParser`` turns engine output lines into a structured ``UCIInfo``.
 Despite the name it is generic to the UCI protocol — nothing depends on
 Stockfish-specific behavior.
 
-A ``StockfishInfo`` carries ``StockfishInfo/depth``, a ``StockfishInfo/Score``,
-the ``StockfishInfo/pv`` (UCI moves), and ``StockfishInfo/multiPV``. The
-``StockfishInfo/Score`` is either centipawns or mate-in-N and exposes
+A ``UCIInfo`` carries ``UCIInfo/depth``, a ``UCIInfo/Score``,
+the ``UCIInfo/pv`` (UCI moves), and ``UCIInfo/multiPV``. The
+``UCIInfo/Score`` is either centipawns or mate-in-N and exposes
 display-ready conversions (`displayText`, `winProbability`, `whiteWinProbability`,
 `negated`).
 
@@ -60,7 +60,7 @@ public protocol ChessEngine: AnyObject {
 An ``EngineAnalysis`` holds the ranked ``EngineAnalysis/ScoredMove`` list, an
 optional ``EngineAnalysis/Evaluation``, and the search depth. Each
 ``EngineAnalysis/ScoredMove`` carries the ``Move``, its SAN notation, a
-probability, an optional ``StockfishInfo/Score``, and its PV line.
+probability, an optional ``UCIInfo/Score``, and its PV line.
 
 > Note: ``EngineAnalysis/ScoredMove`` is `Identifiable` and its `id` is the SAN
 > notation — unique within one position's move list and stable across depth
@@ -76,7 +76,7 @@ or mate-in-N, and renders display text plus the same logistic
 ``GameAnalysis`` aggregates per-move results into accuracy figures, where each
 ``GameAnalysis/MoveResult`` records the move index and the rank / probability of
 the player's move. ``PositionEval`` captures the best move and the
-per-MultiPV ``StockfishInfo/Score`` map for a single position, and
+per-MultiPV ``UCIInfo/Score`` map for a single position, and
 ``GuessEloResult`` carries an estimated Elo per side.
 
 ## Play configuration and errors
