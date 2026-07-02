@@ -110,9 +110,8 @@ public nonisolated struct UCIInfo: Sendable, Equatable {
         }
 
         /// `"+1.3"` (one decimal) / `"M5"` / `"-M3"`. One decimal place is the
-        /// pre-existing iOS `UCIInfo.Score` precision (matches
-        /// `FianchettoKit.EvalFormat.formatCentipawnsShort`). Integer
-        /// arithmetic keeps it SkipFoundation-safe.
+        /// pre-existing iOS `UCIInfo.Score` precision. Integer arithmetic keeps
+        /// it SkipFoundation-safe.
         public var displayText: String {
             switch self {
             case .cp(let cp):
