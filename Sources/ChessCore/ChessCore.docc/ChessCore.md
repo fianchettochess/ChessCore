@@ -15,7 +15,7 @@ protocol seams, so the value types are `Sendable` and build everywhere down to
 It provides the core chess machinery: ``Position``/``Move``/``Square``,
 ``MoveGenerator`` (with perft), FEN, ``UCIParser`` (SAN↔UCI), ``Game`` (the move
 tree), ``PGNParser`` / ``PGNExporter``, and ``UCIOutputParser`` /
-``StockfishInfo``. Storage and presentation concerns stay out of the library.
+``UCIInfo``. Storage and presentation concerns stay out of the library.
 
 The ``ChessEngine`` protocol and ``EngineAnalysis`` types describe an engine
 abstraction without binding to any concrete engine. Connect
@@ -98,7 +98,7 @@ print(position.fen)  // "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3
 
 ### Engine output (UCI)
 
-- ``StockfishInfo``
+- ``UCIInfo``
 - ``UCIOutputParser``
 
 ### The engine abstraction
