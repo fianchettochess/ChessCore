@@ -142,7 +142,12 @@ public nonisolated struct UCIInfo: Sendable, Equatable {
 /// Resolved behaviours (folded up from the former per-platform copies):
 /// - Discards bounded (`lowerbound`/`upperbound`) scores — aspiration-window
 ///   artefacts whose true eval is only known to be above/below the number.
-/// - Does NOT require a `pv` token, so score-only probe lines still parse.
+/// - Does NOT require a `pv` token, so score-only probe lines still parse
+///   (one-shot probes and terminal positions — `info depth 0 score mate 0` —
+///   depend on this). Lines with NEITHER a score NOR a pv (`currmove`
+///   progress ticks) are rejected as noise: they have no consumer, and keyed
+///   by `multipv ?? 1` they would overwrite pv-bearing rank-1 entries in the
+///   apps' per-rank accumulators.
 /// - Parses `nps`.
 /// - `parseBestMove` treats `bestmove (none)` as `nil` (terminal position).
 public nonisolated enum UCIOutputParser {
@@ -182,6 +187,10 @@ public nonisolated enum UCIOutputParser {
                 i += 1
             }
         }
+        // Progress noise (`info depth 20 currmove e2e4 currmovenumber 5`):
+        // no score, no pv — nothing any consumer reads, but dangerous to
+        // return (defaults to rank 1, overwriting real MultiPV entries).
+        guard result.scoreCp != nil || result.mateIn != nil || !result.pv.isEmpty else { return nil }
         return result
     }
 
