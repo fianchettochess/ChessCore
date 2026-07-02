@@ -255,7 +255,11 @@ extension PGNExporter {
 
         if let userComment = node.comment {
             if needsSeparator { result += "; " }
-            result += userComment
+            // PGN has no escape for '}' — a bare '}' inside a comment
+            // block terminates the block early. Replace with ')' per
+            // convention (the PGN spec does not provide an escape
+            // sequence for this character).
+            result += userComment.replacingOccurrences(of: "}", with: ")")
         }
 
         result += "} "

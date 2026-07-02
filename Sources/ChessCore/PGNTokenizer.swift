@@ -303,14 +303,24 @@ public enum PGNParser {
     /// step — the `PGNGame() + tokenize + parseMainLineSnapshot` prelude
     /// the tactics / endgame / stats extractors each repeated verbatim.
     /// The per-caller minimum-move-count guard stays at the call site.
+    /// Pass `pliesLimit` to stop collecting moves after N plies (useful
+    /// for opening-prefix-only consumers — avoids paying the full
+    /// parse cost for long games). Defaults to `Int.max` so existing
+    /// callers see identical behaviour. (bounded-perf 2026-07-01)
     /// (dedup 2026-06-17)
-    public nonisolated static func mainLineSnapshot(fromMoveText moveText: String) -> ParsedMainLine {
+    public nonisolated static func mainLineSnapshot(
+        fromMoveText moveText: String,
+        pliesLimit: Int = Int.max
+    ) -> ParsedMainLine {
         var pgnGame = PGNGame()
         pgnGame.moveTokens = tokenize(moveText)
-        return parseMainLineSnapshot(from: pgnGame)
+        return parseMainLineSnapshot(from: pgnGame, pliesLimit: pliesLimit)
     }
 
-    public nonisolated static func parseMainLineSnapshot(from pgnGame: PGNGame) -> ParsedMainLine {
+    public nonisolated static func parseMainLineSnapshot(
+        from pgnGame: PGNGame,
+        pliesLimit: Int = Int.max
+    ) -> ParsedMainLine {
         let startPosition = Position.initial()
         var position = startPosition
         var moves: [MainLineMoveSnapshot] = []
@@ -322,6 +332,8 @@ public enum PGNParser {
         var variationDepth = 0
 
         for token in tokens {
+            // Stop early once the prefix is satisfied; no remaining tokens matter.
+            if moves.count >= pliesLimit { break }
             switch token {
             case .variationStart:
                 variationDepth += 1
