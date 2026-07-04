@@ -155,4 +155,72 @@ final class NotationAndBookTests: XCTestCase {
         XCTAssertEqual(g2.rootChildren.count, 2,
                        "Variation count must survive PGN export/import")
     }
+
+    // MARK: - SetUp/FEN start-position round-trip
+
+    func testLoadGameHonorsFENStartPosition() {
+        // A K+R vs K endgame start: SAN below is only legal from THIS position,
+        // so a loader that ignores the FEN tag cannot parse a single move.
+        let fen = "8/8/8/4k3/8/8/4K3/7R w - - 0 1"
+        let pgn = """
+        [Event "Test"]
+        [SetUp "1"]
+        [FEN "\(fen)"]
+        [Result "*"]
+
+        1. Rh5+ Kd4 2. Kd2 *
+        """
+        guard let game = PGNParser.loadGame(from: pgn) else {
+            XCTFail("FEN-start PGN must load"); return
+        }
+        XCTAssertEqual(game.startPosition.fen, fen,
+                       "startPosition must come from the FEN tag, not .initial()")
+        XCTAssertEqual(game.mainLine.map(\.notation), ["Rh5+", "Kd4", "Kd2"],
+                       "SAN must parse relative to the FEN start position")
+    }
+
+    func testLoadGameRejectsInvalidFENTag() {
+        let pgn = "[SetUp \"1\"]\n[FEN \"not a fen\"]\n\n1. e4 *"
+        XCTAssertNil(PGNParser.loadGame(from: pgn),
+                     "A syntactically invalid FEN tag must fail the load, not silently fall back to the initial position")
+    }
+
+    func testLoadGameWithoutFENTagUsesInitialStart() {
+        guard let game = PGNParser.loadGame(from: "1. e4 e5 *") else {
+            XCTFail("standard PGN must load"); return
+        }
+        XCTAssertEqual(game.startPosition.fen, Position.initial().fen,
+                       "No FEN tag → standard initial start, unchanged behaviour")
+        XCTAssertEqual(game.mainLine.map(\.notation), ["e4", "e5"])
+    }
+
+    func testFENStartExportImportRoundTrip() {
+        // Build a game from a FEN start, play moves, export movetext with the
+        // OTB-save tag shape, re-import, and require an identical game. This is
+        // the exact round-trip the Square Off/e-board OTB save relies on for
+        // "start from an existing position" sessions.
+        let fen = "8/8/8/4k3/8/8/4K3/7R w - - 0 1"
+        let game = Game()
+        XCTAssertTrue(game.loadFEN(fen))
+        for san in ["Rh5+", "Kd4", "Kd2"] {
+            guard let move = PGNParser.parseMove(san, in: game.position) else {
+                XCTFail("setup move \(san) must be legal"); return
+            }
+            game.applyMoveFromPGN(move)
+        }
+
+        let moveText = PGNExporter.moveText(for: game.rootChildren)
+        let pgn = "[SetUp \"1\"]\n[FEN \"\(fen)\"]\n[Result \"*\"]\n\n\(moveText) *"
+
+        guard let reloaded = PGNParser.loadGame(from: pgn) else {
+            XCTFail("exported FEN-start PGN must re-import"); return
+        }
+        XCTAssertEqual(reloaded.startPosition.fen, fen)
+        XCTAssertEqual(reloaded.mainLine.map(\.notation),
+                       game.mainLine.map(\.notation),
+                       "Moves must survive the FEN-start export/import round-trip")
+        XCTAssertEqual(reloaded.mainLine.last?.positionAfter.fen,
+                       game.mainLine.last?.positionAfter.fen,
+                       "Final position must match after round-trip")
+    }
 }
