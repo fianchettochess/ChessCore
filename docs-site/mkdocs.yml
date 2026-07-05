@@ -1,6 +1,6 @@
 site_name: ChessCore
-site_description: A portable, Foundation-only Swift chess core — model, move generation, FEN, SAN/UCI, PGN, opening book, and UCI engine-output parsing.
-site_author: Fianchetto
+site_description: A portable, Foundation-only Swift chess core — model, move generation, FEN, SAN/UCI, PGN, and UCI engine-output parsing.
+site_author: Jared Brewer
 copyright: "ChessCore — a portable, Foundation-only Swift chess library."
 
 docs_dir: docs
@@ -61,6 +61,5 @@ nav:
       - FEN: concepts/fen.md
       - SAN & UCI: concepts/san-uci.md
       - PGN: concepts/pgn.md
-      - Opening book: concepts/opening-book.md
       - Engine protocol: concepts/engine-protocol.md
   - Usage Examples: examples.md

@@ -276,8 +276,10 @@ extension PGNExporter {
 
     private static func defaultTags(for game: Game) -> PGNGame.OrderedTags {
         var tags = PGNGame.OrderedTags()
+        // Neutral placeholders for a general-purpose kernel; callers that want
+        // real metadata pass their own tags to `export(game:tags:)`.
         tags["Event"] = "Casual Game"
-        tags["Site"] = "Fianchetto App"
+        tags["Site"] = "?"
 
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy.MM.dd"

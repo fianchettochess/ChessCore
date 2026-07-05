@@ -2,3 +2,7 @@
 .swiftpm/
 .DS_Store
 Package.resolved
+
+# Guard against a stray self-referential repo-root symlink (ChessCore -> this
+# dir) reappearing and being swept into history by `git add -A`.
+/ChessCore

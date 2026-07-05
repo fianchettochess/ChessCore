@@ -1,17 +1,14 @@
 // swift-tools-version: 6.0
 //
-// ChessCore — the GENERAL, community-grade chess core, carved out of the
+// ChessCore — a general-purpose, MIT-licensed chess core, carved out of the
 // Fianchetto app so it can be shared by the Apple app, the Android (Skip/
-// SkipFuse) port, and (eventually) the wider Swift chess community under a
-// permissive license. The stale ChessKit incumbents leave this niche
-// underserved.
+// SkipFuse) port, and the wider Swift chess community.
 //
-// Scope: the position model, move generation (+ perft), FEN, SAN<->UCI, PGN,
-// opening book, the engine probe protocol, general analysis math, and the
-// storage seam protocols. Foundation-only and NETWORK-FREE — NO SwiftData,
-// CloudKit, GameKit, CoreML, UIKit, AppKit, SwiftUI, Combine, CoreBluetooth, or
-// URLSession. App-specific product logic + the network service clients live in
-// the separate, higher-floored `FianchettoKit` package (which depends on this).
+// Scope: the position model, move generation (+ perft), FEN, SAN<->UCI
+// conversion, PGN read/write, and the UCI engine-probe protocol. Foundation-only
+// and NETWORK-FREE — NO SwiftData, CloudKit, GameKit, CoreML, UIKit, AppKit,
+// SwiftUI, Combine, CoreBluetooth, or URLSession. App-specific product logic and
+// network service clients live in separate downstream packages.
 import PackageDescription
 
 let package = Package(

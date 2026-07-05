@@ -1,8 +1,8 @@
 # ``ChessCore``
 
 A portable, Foundation-only chess core: the position model, legal move
-generation, FEN, SAN↔UCI, PGN, an opening book, and UCI engine-output parsing —
-with no Apple-UI dependencies.
+generation, FEN, SAN↔UCI, PGN, and UCI engine-output parsing — with no
+Apple-UI dependencies.
 
 ## Overview
 
@@ -105,10 +105,6 @@ print(position.fen)  // "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3
 
 - ``ChessEngine``
 - ``EngineAnalysis``
-- ``GameAnalysis``
-- ``PositionEval``
-- ``PlayConfig``
-- ``GuessEloResult``
 - ``EngineError``
 
 ### The game tree
