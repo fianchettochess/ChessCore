@@ -140,6 +140,28 @@ public final class Game {
         currentNode = node.parent
     }
 
+    /// Retract (DELETE) the last `n` plies from the current line, moving the cursor
+    /// back to the resulting position. Unlike `undoMove` — which only moves the
+    /// cursor and leaves the moves in the tree as a forward continuation — this
+    /// REMOVES the undone moves from the tree. A physical board take-back retracts
+    /// them, so the next move played becomes the MAIN line rather than a variation
+    /// hanging off the retracted move. No-op past the start of the line.
+    public func retractLastPlies(_ n: Int) {
+        var removedAny = false
+        for _ in 0 ..< max(0, n) {
+            guard let node = currentNode else { break }
+            position = node.positionBefore
+            currentNode = node.parent
+            if let parent = node.parent {
+                parent.children.removeAll { $0 === node }
+            } else {
+                rootChildren.removeAll { $0 === node }
+            }
+            removedAny = true
+        }
+        if removedAny { bumpTreeMutation() }
+    }
+
     public func redoMove() {
         guard let next = currentNode?.mainContinuation ?? rootChildren.first else { return }
         navigateToNode(next)
