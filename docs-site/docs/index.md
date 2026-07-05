@@ -1,8 +1,8 @@
 # ChessCore
 
 A portable, **Foundation-only** Swift chess core: the position model, legal move
-generation (with a perft-verified generator), FEN, SAN↔UCI, PGN, an opening book,
-and UCI engine-output parsing — with no Apple-UI dependencies.
+generation (with a perft-verified generator), FEN, SAN↔UCI, PGN, and UCI
+engine-output parsing — with no Apple-UI dependencies.
 
 ## Features
 
@@ -21,8 +21,8 @@ and UCI engine-output parsing — with no Apple-UI dependencies.
 
 The package provides the core chess types: `Position` / `Move` / `Square` /
 `Piece`, `MoveGenerator` (with perft), FEN, `UCIParser` (SAN↔UCI), `PGNParser` /
-`PGNExporter`, `Game` (the move tree), `OpeningBook`, and `UCIOutputParser` /
-`StockfishInfo`. The `ChessEngine` protocol and `EngineAnalysis` types describe an
+`PGNExporter`, `Game` (the move tree), and `UCIOutputParser` /
+`UCIInfo`. The `ChessEngine` protocol and `EngineAnalysis` types describe an
 engine abstraction without binding to any concrete engine.
 
 ## Example

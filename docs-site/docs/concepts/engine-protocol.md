@@ -5,25 +5,31 @@ engine, and it parses generic UCI `info` and `bestmove` output.
 
 ## Parsing UCI output
 
-`UCIOutputParser` converts engine output lines into a structured `StockfishInfo`.
+`UCIOutputParser` converts engine output lines into a structured `UCIInfo`.
 The parser conforms to the UCI protocol and does not depend on any
 Stockfish-specific behavior.
 
 ```swift
-public struct StockfishInfo: Sendable {
-    public var depth: Int
-    public var score: Score
+public struct UCIInfo: Sendable {
+    public var depth: Int?
+    public var multipv: Int?
+    public var scoreCp: Int?
+    public var mateIn: Int?
+    public var nps: Int?
     public var pv: [String]      // UCI moves
-    public var multiPV: Int
+
+    // Computed API
+    public var score: Score         // derived from scoreCp / mateIn
+    public var multiPV: Int         // multipv ?? 1
+    public var centipawns: Int      // mate maps to ±100_000
+    public var bestMoveUCI: String? // pv.first
 
     public enum Score: Sendable {
         case cp(Int)             // centipawns
         case mate(Int)           // mate in N
 
-        public var centipawns: Int          // mate maps to +/- 100_000
+        public var centipawns: Int          // mate maps to ±100_000
         public var displayText: String      // "+1.5", "M3", "-M2"
-        public var winProbability: Double   // logistic 1/(1+exp(-0.00368208 * cp))
-        public var whiteWinProbability: Double
         public var negated: Score
     }
 }
@@ -33,8 +39,7 @@ public struct StockfishInfo: Sendable {
 if let info = UCIOutputParser.parseInfo(
     "info depth 20 score cp 31 multipv 1 pv e2e4 e7e5 g1f3"
 ) {
-    print(info.depth, info.score.displayText)   // 20  "+0.31"
-    print(info.score.winProbability)            // ~0.53
+    print(info.depth, info.score.displayText)   // Optional(20)  "+0.3"
 
     // Render the PV in SAN:
     let san = UCIParser.convertPVToSAN(info.pv, from: position)
@@ -75,7 +80,7 @@ public struct EngineAnalysis {
         public let move: Move
         public let notation: String
         public let probability: Double
-        public let score: StockfishInfo.Score?
+        public let score: UCIInfo.Score?
         public let pvLine: [String]
     }
 
@@ -85,7 +90,6 @@ public struct EngineAnalysis {
         case mate(Int)
 
         public var displayText: String
-        public var whiteWinProbability: Double   // same 0.00368208 logistic
         public var scoreText: String
     }
 }
@@ -95,45 +99,9 @@ public struct EngineAnalysis {
 list and stable across depth updates, so list rows keep a stable identity as the
 engine publishes deeper results.
 
-## Game-level analysis types
+## Engine errors
 
 ```swift
-public struct GameAnalysis {
-    public let moveResults: [MoveResult]
-    public var accuracy: Double        // fraction with playerMoveRank == 0
-    public var top3Accuracy: Double    // fraction with rank in 0..<3
-    public var averageProbability: Double
-
-    public struct MoveResult {
-        public let moveIndex: Int
-        public let playerMoveRank: Int
-        public let playerMoveProbability: Double
-    }
-}
-
-public struct PositionEval {
-    public let bestMoveUCI: String
-    public let scores: [Int: StockfishInfo.Score]   // keyed by MultiPV index
-    public var bestScore: StockfishInfo.Score
-    public var secondBestScore: StockfishInfo.Score?
-}
-
-public struct GuessEloResult {
-    public let whiteElo: Int?
-    public let blackElo: Int?
-}
-```
-
-## Play configuration and errors
-
-```swift
-public struct PlayConfig: Equatable {
-    public var engine: Engine          // .maia | .stockfish
-    public var playerColor: PlayerColor // .white | .black
-    public enum Engine: String, CaseIterable { case maia = "Maia", stockfish = "Stockfish" }
-    public enum PlayerColor: String, CaseIterable { case white = "White", black = "Black" }
-}
-
 public enum EngineError: LocalizedError {
     case modelNotLoaded
     case invalidInput

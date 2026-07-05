@@ -83,7 +83,7 @@ final class NotationAndBookTests: XCTestCase {
                       "move after the comment must still be present in the output")
     }
 
-    func testStockfishInfoParsing() {
+    func testUCIInfoParsing() {
         let info = UCIOutputParser.parseInfo("info depth 20 score cp 35 multipv 1 pv e2e4 e7e5")
         XCTAssertEqual(info?.depth, 20)
         XCTAssertEqual(info?.score.centipawns, 35)

@@ -1,8 +1,8 @@
 # ChessCore
 
 A portable, Foundation-only Swift chess library: the position model,
-perft-verified move generation, FEN, SAN/UCI, PGN, a game tree, an opening book,
-and UCI engine-output parsing. It has no Apple-UI or platform dependencies.
+perft-verified move generation, FEN, SAN/UCI, PGN, a game tree, and UCI
+engine-output parsing. It has no Apple-UI or platform dependencies.
 
 ChessCore provides the chess engine and model only. Higher-level analysis,
 statistics, and persistence are intended to live in separate packages built on
@@ -31,8 +31,7 @@ top of it, keeping the core small, portable, and free of presentation concerns.
 | Game tree | `Game`, `MoveNode` |
 | FEN | `Position(fen:)`, `Position.fen`, `positionKey`, `stockfishSafeFEN` |
 | Notation and PGN | `UCIParser` (SAN/UCI), `PGNParser`, `PGNExporter`, `PGNGame`, `GameTagCodec` |
-| Opening book | `OpeningBook` — ECO lookup and continuations, en-passant-transposition aware |
-| Engine interface | `ChessEngine`, `EngineAnalysis`, `UCIOutputParser`, `StockfishInfo` |
+| Engine interface | `ChessEngine`, `EngineAnalysis`, `UCIOutputParser`, `UCIInfo`, `EngineError` |
 
 The `ChessEngine` protocol and `EngineAnalysis` types define an engine interface
 independent of any concrete engine. Conforming types may wrap

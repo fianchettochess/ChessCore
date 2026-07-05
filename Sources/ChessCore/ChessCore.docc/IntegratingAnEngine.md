@@ -19,15 +19,13 @@ Stockfish-specific behavior.
 A ``UCIInfo`` carries ``UCIInfo/depth``, a ``UCIInfo/Score``,
 the ``UCIInfo/pv`` (UCI moves), and ``UCIInfo/multiPV``. The
 ``UCIInfo/Score`` is either centipawns or mate-in-N and exposes
-display-ready conversions (`displayText`, `winProbability`, `whiteWinProbability`,
-`negated`).
+display-ready conversions (`displayText`, `centipawns`, `negated`).
 
 ```swift
 if let info = UCIOutputParser.parseInfo(
     "info depth 20 score cp 31 multipv 1 pv e2e4 e7e5 g1f3"
 ) {
     print(info.depth, info.score.displayText)   // 20  "+0.31"
-    print(info.score.winProbability)            // ~0.53
 
     // Render the PV in SAN:
     let san = UCIParser.convertPVToSAN(info.pv, from: position)
@@ -68,23 +66,12 @@ probability, an optional ``UCIInfo/Score``, and its PV line.
 > results.
 
 The ``EngineAnalysis/Evaluation`` enum models a win/draw/loss split, centipawns,
-or mate-in-N, and renders display text plus the same logistic
-`whiteWinProbability` used elsewhere in ChessCore.
+or mate-in-N, and renders display text via `displayText` and `scoreText`.
 
-## Game-level analysis types
+## Errors
 
-``GameAnalysis`` aggregates per-move results into accuracy figures, where each
-``GameAnalysis/MoveResult`` records the move index and the rank / probability of
-the player's move. ``PositionEval`` captures the best move and the
-per-MultiPV ``UCIInfo/Score`` map for a single position, and
-``GuessEloResult`` carries an estimated Elo per side.
-
-## Play configuration and errors
-
-``PlayConfig`` selects which engine to play against
-(``PlayConfig/Engine``) and which color the human takes
-(``PlayConfig/PlayerColor``). ``EngineError`` enumerates the failure modes —
-model-not-loaded, invalid input, prediction failure, and no-legal-moves.
+``EngineError`` enumerates the failure modes — model-not-loaded, invalid input,
+prediction failure, and no-legal-moves.
 
 ## Wiring a real engine
 

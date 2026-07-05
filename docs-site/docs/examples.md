@@ -74,19 +74,6 @@ func importGames(_ pgn: String) async -> [ParsedMainLine] {
 }
 ```
 
-## Identify the opening
-
-```swift
-OpeningBook.configureShared(precomputedData: bundledOpeningsData, isPlist: false)
-
-func openingName(after uciMoves: [String]) -> String? {
-    let position = replay(uciMoves)
-    return OpeningBook.shared.lookup(position)?.name
-}
-
-print(openingName(after: ["e2e4", "e7e5", "g1f3", "b8c6", "f1b5"]))  // "Ruy Lopez"
-```
-
 ## Build an EngineAnalysis from UCI output
 
 The following engine adapter consumes raw UCI `info` lines (for example, from a
@@ -103,12 +90,12 @@ func buildAnalysis(
     let legal = MoveGenerator.legalMoves(for: position)
 
     // Collect the best info per MultiPV index.
-    var byPV: [Int: StockfishInfo] = [:]
+    var byPV: [Int: UCIInfo] = [:]
     var depth = 0
     for line in infoLines {
         guard let info = UCIOutputParser.parseInfo(line) else { continue }
         byPV[info.multiPV] = info
-        depth = max(depth, info.depth)
+        depth = max(depth, info.depth ?? 0)
     }
 
     let scored: [EngineAnalysis.ScoredMove] = byPV
@@ -117,10 +104,13 @@ func buildAnalysis(
             guard let firstUCI = info.pv.first,
                   let move = UCIParser.uciToMove(firstUCI, in: legal) else { return nil }
             let notation = MoveGenerator.algebraicNotation(for: move, in: position, legalMoves: legal)
+            // Logistic win-probability from centipawns (engine-POV).
+            let cp = Double(min(10_000, max(-10_000, info.centipawns)))
+            let probability = 1.0 / (1.0 + exp(-0.00368208 * cp))
             return EngineAnalysis.ScoredMove(
                 move: move,
                 notation: notation,
-                probability: info.score.winProbability,
+                probability: probability,
                 score: info.score,
                 pvLine: UCIParser.convertPVToSAN(info.pv, from: position, initialLegalMoves: legal)
             )
