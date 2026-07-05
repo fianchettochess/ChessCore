@@ -4,6 +4,45 @@ import XCTest
 final class GameTests: XCTestCase {
     private func uci(_ s: String, _ g: Game) -> Move { UCIParser.uciToMove(s, in: g.position)! }
 
+    // MARK: - retractLastPlies (take-back)
+
+    func testRetractRemovesMoveSoNextIsMainline() {
+        // Play e4, retract it, play f3 — f3 must be the MAIN line (not a variation
+        // hanging off the retracted e4). This is the electronic-board take-back save fix.
+        let g = Game()
+        g.newGame()
+        g.apply(uci("e2e4", g))
+        g.retractLastPlies(1)
+        XCTAssertNil(g.currentNode, "cursor back to start after retracting the only move")
+        XCTAssertTrue(g.rootChildren.isEmpty, "the retracted move must be REMOVED from the tree")
+        g.apply(uci("f2f3", g))
+        XCTAssertEqual(g.rootChildren.count, 1, "only the actually-played move remains at the root")
+        XCTAssertEqual(g.rootChildren.first?.notation, "f3")
+        // Exported movetext must be the clean played line, no retracted-move variation.
+        XCTAssertEqual(PGNExporter.moveText(for: g.rootChildren), "1. f3")
+    }
+
+    func testRetractMultiPlyRemovesWholeBranch() {
+        let g = Game()
+        g.newGame()
+        g.apply(uci("e2e4", g))
+        g.apply(uci("e7e5", g))
+        g.retractLastPlies(2)            // undo both, back to start
+        XCTAssertNil(g.currentNode)
+        XCTAssertTrue(g.rootChildren.isEmpty, "the whole retracted branch is gone")
+        g.apply(uci("d2d4", g))
+        XCTAssertEqual(PGNExporter.moveText(for: g.rootChildren), "1. d4")
+    }
+
+    func testRetractPastStartIsSafe() {
+        let g = Game()
+        g.newGame()
+        g.apply(uci("e2e4", g))
+        g.retractLastPlies(5)            // more than exists
+        XCTAssertNil(g.currentNode)
+        XCTAssertTrue(g.rootChildren.isEmpty)
+    }
+
     func testApplyNavigateUndoRedo() {
         let g = Game()
         g.apply(uci("e2e4", g))
