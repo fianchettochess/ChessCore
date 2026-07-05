@@ -13,11 +13,15 @@ import PackageDescription
 
 let package = Package(
     name: "ChessCore",
-    // Generous community floor: iOS 13 / macOS 10.15 (the Swift-concurrency
-    // back-deployment line; SwiftStockfish parity). The code is pure Swift
-    // stdlib + Foundation and has been verified to build down to iOS 11 / macOS
-    // 10.10; it can be lowered to iOS 12 / macOS 10.13 (Swift-ABI-stable line)
-    // for maximum reach at zero API cost if a public release wants it.
+    // Lowest viable floor: iOS 13 / macOS 10.15 — the Swift-concurrency
+    // back-deployment line (SwiftStockfish/SwiftReckless parity). This is a hard
+    // floor: the public API includes async engine seams — `ChessEngine.analyze`
+    // (async), `UCIEngine.output` (AsyncStream), and two internal actors — which
+    // the concurrency runtime supports only down to iOS 13 / macOS 10.15. The
+    // pure value types (model, move generation, FEN, SAN<->UCI, PGN) would build
+    // lower on their own, but cannot be declared lower while those async seams
+    // stay in this module (they'd fail on iOS 12). To go lower, the engine
+    // protocols would have to move to a separate downstream package.
     platforms: [
         .macOS(.v10_15),
         .iOS(.v13),
