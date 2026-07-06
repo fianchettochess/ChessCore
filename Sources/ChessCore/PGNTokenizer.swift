@@ -19,7 +19,10 @@ public nonisolated struct PGNGame: Identifiable, Sendable {
     public nonisolated var opening: String { tags["Opening"] ?? tags["ECO"] ?? "" }
     public nonisolated var moveCount: Int { (moves.count + 1) / 2 }
 
-    public struct OrderedTags: Sendable {
+    // Equatable is synthesized over (keys, values) — key ORDER participates in
+    // equality, which is what tag-mirror change detection wants: any edit,
+    // including a pure reorder, reads as "changed". (Game-wrap Stage 2 prep)
+    public struct OrderedTags: Sendable, Equatable {
         private var keys: [String] = []
         private var values: [String: String] = [:]
 

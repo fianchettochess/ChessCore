@@ -26,6 +26,21 @@ public final class Game {
         treeMutationCount &+= 1
     }
 
+    /// Monotonically increasing counter bumped whenever a **node property**
+    /// changes (annotation, comment, engine results, move quality) without the
+    /// tree structure changing. `MoveNode` is a plain reference type, so field
+    /// writes are invisible to any observation layer — UIs key node-detail
+    /// renders/caches off this counter instead (the companion to
+    /// `treeMutationCount`, which covers structural edits only).
+    public private(set) var nodePropertyVersion: Int = 0
+
+    /// Bump `nodePropertyVersion` directly — for callers that batch many raw
+    /// `MoveNode` field writes (e.g. a bulk annotation restore) and coalesce
+    /// them into a single invalidation at the end.
+    public func bumpNodeProperty() {
+        nodePropertyVersion &+= 1
+    }
+
     /// PGN tags carried with a loaded game; used by `exportPGN()`.
     public var loadedTags: PGNGame.OrderedTags?
 
@@ -46,6 +61,11 @@ public final class Game {
         _cachedLegalMovesPosition = position
         return moves
     }
+
+    /// All legal moves for the current position, cached per position. Public so
+    /// UI layers (square selection, pre-move validation) share this cache
+    /// instead of maintaining their own `MoveGenerator.legalMoves` memo.
+    public var legalMoves: [Move] { allLegalMoves }
 
     public var lastMove: Move? { currentNode?.move }
 
@@ -273,6 +293,18 @@ public final class Game {
     /// internally consistent regardless of the target FEN's metadata fields.
     @discardableResult
     public func reconcile(toPlacementOf target: Position, maxPly: Int = 4) -> Bool {
+        guard let path = reconcilePath(toPlacementOf: target, maxPly: maxPly) else { return false }
+        for m in path { apply(m) }   // commit through the tree
+        return true
+    }
+
+    /// The pure query half of `reconcile(toPlacementOf:)`: the legal-move
+    /// sequence that reaches `target`'s placement from the current position,
+    /// WITHOUT applying it. Returns `[]` when the placement already matches,
+    /// `nil` when it is unreachable within `maxPly`. Callers that need
+    /// per-move side effects (clock switching, haptics on a physical-board
+    /// resync) can replay the path through their own `apply` wrapper.
+    public func reconcilePath(toPlacementOf target: Position, maxPly: Int = 4) -> [Move]? {
         func placementKey(_ p: Position) -> String {
             let parts = p.fen.split(separator: " ")
             let placement = parts.first.map(String.init) ?? ""
@@ -281,7 +313,7 @@ public final class Game {
         }
 
         let targetKey = placementKey(target)
-        if placementKey(position) == targetKey { return true }   // already in sync
+        if placementKey(position) == targetKey { return [] }   // already in sync
 
         // Breadth-first over legal-move sequences, deduped by placement so the search
         // stays small even at the default depth.
@@ -295,8 +327,7 @@ public final class Game {
                     MoveGenerator.applyMoveUnchecked(&advanced, move)
                     let key = placementKey(advanced)
                     if key == targetKey {
-                        for m in path + [move] { apply(m) }   // commit through the tree
-                        return true
+                        return path + [move]
                     }
                     if seen.insert(key).inserted {
                         next.append((advanced, path + [move]))
@@ -306,13 +337,42 @@ public final class Game {
             frontier = next
             if frontier.isEmpty { break }
         }
-        return false
+        return nil
     }
 
     // MARK: - Tree editing
 
     public func setAnnotation(_ annotation: MoveAnnotation?, on node: MoveNode) {
         node.annotation = annotation
+        bumpNodeProperty()
+    }
+
+    public func setComment(_ comment: String?, on node: MoveNode) {
+        node.comment = comment
+        bumpNodeProperty()
+    }
+
+    public func clearComment(on node: MoveNode) {
+        node.comment = nil
+        bumpNodeProperty()
+    }
+
+    public func setEngineResults(on node: MoveNode, bestMoveUCI: String?, eval: String?) {
+        node.engineBestMoveUCI = bestMoveUCI
+        node.engineEval = eval
+        bumpNodeProperty()
+    }
+
+    public func setMoveQuality(_ quality: MoveQuality?, accuracy: Double?, on node: MoveNode) {
+        node.moveQuality = quality
+        node.moveAccuracy = accuracy
+        bumpNodeProperty()
+    }
+
+    /// Signal the end of a bulk annotation restore that wrote `MoveNode`
+    /// fields directly — one coalesced `nodePropertyVersion` bump.
+    public func finishAnnotationRestore() {
+        bumpNodeProperty()
     }
 
     public func deleteFromNode(_ node: MoveNode) {
