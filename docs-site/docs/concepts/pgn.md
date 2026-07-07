@@ -106,6 +106,52 @@ let movetext = PGNExporter.tokenText(from: game)
 `tokenText(from:)` serializes the game's `moveTokens` (falling back to its flat
 `moves` list), including `{}` comments and `$n` NAGs.
 
+## PGN text → live Game → PGN text
+
+The snapshot path above produces an immutable `ParsedMainLine`. For a **live,
+mutable game tree** use `PGNParser.loadGame` and `PGNExporter.export` — the
+round-trip that bridges PGN text to a `Game` instance and back.
+
+```swift
+// Parse PGN text directly into a live Game (first game in the string):
+if let game = PGNParser.loadGame(from: pgnString) {
+    // game is a fully-hydrated Game with a MoveNode tree,
+    // ready for navigation, annotation, and analysis.
+    game.undoMove()
+    game.setAnnotation(.brilliant, on: game.currentNode!)
+}
+
+// If you already have a PGNGame from PGNParser.parse(_:):
+if let game = PGNParser.loadGame(from: pgnGame) {
+    // SetUp/FEN tags are honoured: non-standard start positions work.
+}
+```
+
+`loadGame(from:)` returns `nil` only when the PGN is syntactically invalid or a
+`SetUp`/`FEN` tag contains a malformed FEN string. A valid-but-empty game (no
+moves) returns an empty `Game`.
+
+### Export a live Game to PGN
+
+```swift
+// Full PGN: seven-tag roster + move text (with variations and annotations):
+let pgn = game.exportPGN()
+
+// Export with custom tags:
+var tags = PGNGame.OrderedTags()
+tags["Event"] = "Club Championship"
+tags["White"] = "Alice"
+tags["Black"] = "Bob"
+let pgn2 = PGNExporter.export(game: game, tags: tags)
+
+// Move text only (no headers) — useful for embedding in a larger document:
+let text = PGNExporter.moveText(for: game.rootChildren)
+```
+
+`PGNExporter.export` writes variations with `( … )` brackets, annotation
+suffixes, and inline comments that include engine eval, best-move, clock time,
+and user comments — the same comment format that `loadGame` reads back.
+
 ## The tag codec
 
 `GameTagCodec` encodes a full PGN tag set as a single escape-safe

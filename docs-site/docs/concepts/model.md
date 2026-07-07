@@ -103,6 +103,22 @@ public struct MoveRecord: Sendable {
 }
 ```
 
+### Spoken labels
+
+`PieceType` and `Piece` carry spoken-label helpers for VoiceOver / TalkBack
+accessibility labels and human-readable piece descriptions:
+
+```swift
+PieceType.knight.displayName         // "knight"
+PieceType.queen.displayName          // "queen"
+
+let piece = Piece(type: .bishop, color: .white)
+piece.descriptiveName                // "White bishop"
+```
+
+`displayName` is the lowercase noun; `descriptiveName` is the `"Color noun"` form
+used by accessibility square labels and physical-board correction prose.
+
 ## MoveAnnotation
 
 The PGN/NAG glyphs. The model covers chess logic only; display name, symbol,

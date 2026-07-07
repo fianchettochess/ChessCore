@@ -69,7 +69,7 @@ for (i, snap) in line.moves.enumerated() {
 @MainActor
 func importGames(_ pgn: String) async -> [ParsedMainLine] {
     await Task.detached(priority: .userInitiated) {
-        PGNParser.parse(pgn).map(PGNParser.parseMainLineSnapshot(from:))
+        PGNParser.parse(pgn).map { PGNParser.parseMainLineSnapshot(from: $0) }
     }.value
 }
 ```
