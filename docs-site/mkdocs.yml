@@ -2,6 +2,7 @@ site_name: ChessCore
 site_description: A portable, Foundation-only Swift chess core — model, move generation, FEN, SAN/UCI, PGN, and UCI engine-output parsing.
 site_author: Jared Brewer
 copyright: "ChessCore — a portable, Foundation-only Swift chess library."
+site_url: https://fianchettochess.app/docs/chesscore/
 
 docs_dir: docs
 
