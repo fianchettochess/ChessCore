@@ -10,7 +10,7 @@ The parser conforms to the UCI protocol and does not depend on any
 Stockfish-specific behavior.
 
 ```swift
-public struct UCIInfo: Sendable {
+public struct UCIInfo: Sendable, Equatable {
     public var depth: Int?
     public var multipv: Int?
     public var scoreCp: Int?
@@ -21,10 +21,16 @@ public struct UCIInfo: Sendable {
     // Computed API
     public var score: Score         // derived from scoreCp / mateIn
     public var multiPV: Int         // multipv ?? 1
-    public var centipawns: Int      // mate maps to ±100_000
+    public var centipawns: Int      // mate maps to ±100_000 (engine-POV)
     public var bestMoveUCI: String? // pv.first
+    public var displayText: String  // "+1.3", "M5", "-M3"
 
-    public enum Score: Sendable {
+    // White-POV conversion
+    public func whitePovCentipawns(sideToMoveIsWhite: Bool) -> Int
+    public static func whitePovCp(_ cp: Int, sideToMoveIsWhite: Bool) -> Int
+    public static func whitePovMate(_ mate: Int, sideToMoveIsWhite: Bool) -> Int
+
+    public enum Score: Sendable, Equatable {
         case cp(Int)             // centipawns
         case mate(Int)           // mate in N
 
@@ -46,12 +52,37 @@ if let info = UCIOutputParser.parseInfo(
 }
 
 let best = UCIOutputParser.parseBestMove("bestmove e2e4 ponder e7e5")   // "e2e4"
+
+// Distil a MultiPV batch — keeps the last (highest-depth) entry per rank.
+// The result dictionary maps MultiPV index (1 = best) to the deepest UCIInfo
+// seen for that rank; lines without a multipv field count as rank 1.
+let byRank: [Int: UCIInfo] = UCIOutputParser.bestInfoByRank(collectedInfos)
+
+// parse(_:) is an alias for parseInfo(_:) used by FianchettoKit call sites:
+let info2 = UCIOutputParser.parse(line)
 ```
 
 !!! note "Bounded scores"
     `parseInfo` returns `nil` for lines carrying `lowerbound` / `upperbound` —
     those are partial results from an unresolved aspiration window and should not
     drive the eval bar or move arrows.
+
+### White-POV scores
+
+UCI engines report scores from the perspective of the side to move. To drive an
+eval bar anchored to White you need to flip the sign for Black's lines:
+
+```swift
+// Using the instance helper:
+let wpCp = info.whitePovCentipawns(sideToMoveIsWhite: position.activeColor == .white)
+
+// Or the static helpers for a raw value you already have:
+let flipped = UCIInfo.whitePovCp(rawCp, sideToMoveIsWhite: false)     // Black to move
+let mateDist = UCIInfo.whitePovMate(rawMate, sideToMoveIsWhite: false)
+
+// displayText delegates to Score.displayText — the same "+1.3"/"M5" format:
+print(info.displayText)
+```
 
 ## The ChessEngine protocol
 
@@ -70,12 +101,12 @@ public protocol ChessEngine: AnyObject {
 ## EngineAnalysis
 
 ```swift
-public struct EngineAnalysis {
+public struct EngineAnalysis: Sendable {
     public let topMoves: [ScoredMove]
     public let evaluation: Evaluation?
     public let depth: Int?
 
-    public struct ScoredMove: Identifiable {
+    public struct ScoredMove: Identifiable, Sendable {
         public var id: String { notation }   // SAN is stable across depth updates
         public let move: Move
         public let notation: String
@@ -84,7 +115,7 @@ public struct EngineAnalysis {
         public let pvLine: [String]
     }
 
-    public enum Evaluation: Equatable {
+    public enum Evaluation: Equatable, Sendable {
         case winDrawLoss(win: Double, draw: Double, loss: Double)
         case centipawns(Int)
         case mate(Int)
@@ -109,6 +140,50 @@ public enum EngineError: LocalizedError {
     case noLegalMoves
 }
 ```
+
+## Driving a live engine (UCIEngine)
+
+`UCIEngine` is the low-level transport seam. It carries no chess logic — just a
+command channel and an ordered output stream. Both `SwiftStockfish.StockfishEngine`
+and `SwiftReckless.RecklessEngine` conform to it; the consuming app declares the
+conformances (each links its own engine package).
+
+```swift
+public protocol UCIEngine: AnyObject, Sendable {
+    /// Ordered output lines from the engine, without trailing newlines.
+    var output: AsyncStream<String> { get }
+
+    /// Send a raw UCI command (no trailing newline needed).
+    func send(_ command: String)
+
+    // Convenience shorthands:
+    func uci()       // send("uci")
+    func isReady()   // send("isready")
+    func quit()      // send("quit")
+}
+```
+
+A typical adapter loop reads the `output` stream, pipes each line through
+`UCIOutputParser.parseInfo` and `UCIOutputParser.parseBestMove`, and accumulates
+`UCIInfo` values to later convert into an `EngineAnalysis` via the
+`ChessEngine`-level `analyze(position:topK:)` call:
+
+```swift
+for await line in engine.output {
+    if let info = UCIOutputParser.parseInfo(line) {
+        collectedInfos.append(info)
+    } else if let bestMove = UCIOutputParser.parseBestMove(line) {
+        let byRank = UCIOutputParser.bestInfoByRank(collectedInfos)
+        // build EngineAnalysis from byRank …
+        break
+    }
+}
+```
+
+!!! note "One engine at a time"
+    Some in-process engine implementations (e.g. StockfishEngine) capture
+    process-global stdio while live. Only one `UCIEngine` instance should be
+    live at a time.
 
 ## Wiring a real engine
 

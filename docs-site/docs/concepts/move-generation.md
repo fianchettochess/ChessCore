@@ -28,10 +28,12 @@ exclude any that leave the mover's own king in check.
 let legal = MoveGenerator.legalMoves(for: .initial())   // 20 moves
 ```
 
-The result is **cached** on the position's `positionKey`. Legal moves are fully
-determined by the position with no side effects, so cached values never need
-invalidation — repeated lookups and transposing trees benefit automatically. The
-cache is thread-safe.
+Generation is uncached. Magic-bitboard generation is fast enough that the old
+`positionKey`-keyed result cache was removed as a net pessimization: building the
+`BitBoard` attack tables from scratch on every call was cheaper than the
+cache's string-key overhead. `Game` maintains its own single-slot cache (keyed
+by `Position` equality) for the current position, but `MoveGenerator` itself
+re-generates on every call.
 
 To narrow generation — for SAN disambiguation or parsing a PGN move — use
 `findLegalMoves(for:piece:to:)`:

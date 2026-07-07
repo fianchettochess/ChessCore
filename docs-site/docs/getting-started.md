@@ -99,3 +99,5 @@ let userColor = PieceColor.ofUser(white: "Alice", black: "Bob", username: "bob")
 - [Move generation & perft](concepts/move-generation.md) — the correctness
   contract.
 - [PGN](concepts/pgn.md) — read and write games.
+- [The game tree](concepts/game.md) — `Game` and `MoveNode`: navigation,
+  variations, annotations, and PGN/FEN I/O.
