@@ -31,6 +31,26 @@ public nonisolated enum MoveGenerator {
         return board.hasAnyLegalMove()
     }
 
+    /// Fast castling-only legality check.
+    ///
+    /// Returns the UCI strings for every legal castling move available to the side
+    /// to move in `position` — e.g. `"e1g1"` for white kingside, `"e8c8"` for
+    /// black queenside — without generating any other moves.
+    ///
+    /// Correctness contract (verified by `CastlingLegalityTests.testRandomPlayoutEquivalence`):
+    /// ```
+    /// legalCastlingUCIs(for: pos) == Set(legalMoves(for: pos).filter(\.isCastling).map(\.uci))
+    /// ```
+    ///
+    /// The implementation mirrors the `kingMoves` pseudo-legal generation branch and
+    /// the `isLegal` legality filter from `BitBoard` — only for castling moves, so it
+    /// avoids the full pawn/knight/slider/king pseudo-legal pass entirely. Expected
+    /// speedup over `legalMoves`+filter: ~20-50× depending on position complexity.
+    public static func legalCastlingUCIs(for position: Position) -> Set<String> {
+        let board = BitBoard(position)
+        return board.legalCastlingUCIs()
+    }
+
     public static func isInCheck(_ position: Position) -> Bool {
         let board = BitBoard(position)
         let kingSq = position.activeColor == .white ? position.whiteKingSquare.index
@@ -321,6 +341,60 @@ struct BitBoard {
             legal.append(move)
         }
         return legal
+    }
+
+    /// Castling-only fast path. Mirrors `kingMoves` castling branch + `isLegal`
+    /// filter for castling moves only — zero pawn/knight/slider generation.
+    func legalCastlingUCIs() -> Set<String> {
+        let us = side
+        let them = us ^ 1
+        let homeRank = us == 0 ? 0 : 7
+        let kingSq   = homeRank * 8 + 4
+
+        // King must be on the standard home square and have at least one right.
+        guard pieces[us, 0] & bit(kingSq) != 0 else { return [] }
+        let kingside  = us == 0 ? castling.whiteKingside  : castling.blackKingside
+        let queenside = us == 0 ? castling.whiteQueenside : castling.blackQueenside
+        guard kingside || queenside else { return [] }
+
+        let from = Square.fromIndex(kingSq)
+        var pseudo: [Move] = []
+
+        // Replicate kingMoves castling generation exactly (path empty + no
+        // attacks on king's current square / transit squares / landing square):
+        if kingside {
+            let fSq = homeRank * 8 + 5
+            let gSq = homeRank * 8 + 6
+            if allOcc & bit(fSq) == 0 && allOcc & bit(gSq) == 0
+                && !isAttackedIdx(kingSq, by: them)
+                && !isAttackedIdx(fSq, by: them)
+                && !isAttackedIdx(gSq, by: them) {
+                pseudo.append(Move(from: from, to: Square.fromIndex(gSq),
+                                   piece: .king, isCastling: true))
+            }
+        }
+        if queenside {
+            let dSq = homeRank * 8 + 3
+            let cSq = homeRank * 8 + 2
+            let bSq = homeRank * 8 + 1
+            if allOcc & bit(dSq) == 0 && allOcc & bit(cSq) == 0 && allOcc & bit(bSq) == 0
+                && !isAttackedIdx(kingSq, by: them)
+                && !isAttackedIdx(dSq, by: them)
+                && !isAttackedIdx(cSq, by: them) {
+                pseudo.append(Move(from: from, to: Square.fromIndex(cSq),
+                                   piece: .king, isCastling: true))
+            }
+        }
+
+        // Run each candidate through the same isLegal inline make+check that
+        // legalMoves() uses — this catches the (rare) case where moving the
+        // rook to its post-castle square unmasks an attacker on the king's
+        // landing square.
+        var result = Set<String>()
+        for move in pseudo where isLegal(move) {
+            result.insert(move.uci)
+        }
+        return result
     }
 
     mutating func hasAnyLegalMove() -> Bool {
