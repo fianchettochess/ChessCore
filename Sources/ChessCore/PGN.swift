@@ -146,8 +146,14 @@ extension PGNExporter {
 
         lines.append("")
 
+        // Derive the base ply from the start position so FEN-setup games
+        // (including those that begin with black to move at mid-game move
+        // numbers) produce correct move indicators like "5... O-O" rather
+        // than "1. O-O". Standard-start games produce basePly = 0 and
+        // behave identically to before.
+        let basePly = startPlyOffset(for: game.startPosition)
         var moveText = String()
-        writeNodes(game.rootChildren, startPly: 0, into: &moveText)
+        writeNodes(game.rootChildren, basePly: basePly, into: &moveText)
         moveText += resultString(for: game)
         lines.append(wrapMoveText(moveText.trimmingCharacters(in: .whitespaces)))
 
@@ -156,9 +162,21 @@ extension PGNExporter {
 
     public static func moveText(for rootChildren: [MoveNode]) -> String {
         var result = String()
-        writeNodes(rootChildren, startPly: 0, into: &result)
+        writeNodes(rootChildren, basePly: 0, into: &result)
         if result.hasSuffix(" ") { result.removeLast() }
         return result
+    }
+
+    /// Compute the ply offset from a FEN start position so the exporter
+    /// generates correct move numbers and white/black indicators.
+    ///
+    /// For a standard-start game (white to move, fullmoveNumber = 1) this
+    /// returns 0 and the exporter behaves identically to before. For a
+    /// position where it is black to move at fullmoveNumber N, it returns
+    /// (N−1)×2 + 1 so plyIndex 0 maps to "N... <black move>".
+    private static func startPlyOffset(for position: Position) -> Int {
+        let base = (position.fullmoveNumber - 1) * 2
+        return position.activeColor == .white ? base : base + 1
     }
 
     /// Maximum variation nesting depth `writeLine` will honour. Real
@@ -170,44 +188,44 @@ extension PGNExporter {
     /// (V1-REVIEW 2026-06-09 §3, medium)
     private static let maxVariationDepth = 64
 
-    private static func writeNodes(_ children: [MoveNode], startPly: Int, into result: inout String) {
+    private static func writeNodes(_ children: [MoveNode], basePly: Int, into result: inout String) {
         guard let mainNode = children.first else { return }
 
-        writeSingleNode(mainNode, into: &result, afterVariation: false)
+        writeSingleNode(mainNode, basePly: basePly, into: &result, afterVariation: false)
 
         for variation in children.dropFirst() {
             result += "( "
-            writeLine(from: variation, into: &result, depth: 1)
+            writeLine(from: variation, basePly: basePly, into: &result, depth: 1)
             result += ") "
         }
 
         if !mainNode.children.isEmpty {
-            writeNodes(mainNode.children, startPly: mainNode.plyIndex + 1, into: &result)
+            writeNodes(mainNode.children, basePly: basePly, into: &result)
         }
     }
 
-    private static func writeLine(from node: MoveNode, into result: inout String, depth: Int) {
+    private static func writeLine(from node: MoveNode, basePly: Int, into result: inout String, depth: Int) {
         if depth >= Self.maxVariationDepth {
             result += "{ truncated: variation depth limit } "
             return
         }
-        writeSingleNode(node, into: &result, afterVariation: false)
+        writeSingleNode(node, basePly: basePly, into: &result, afterVariation: false)
 
         var current = node
         while let next = current.children.first {
             let hasVariations = current.children.count > 1
             for variation in current.children.dropFirst() {
                 result += "( "
-                writeLine(from: variation, into: &result, depth: depth + 1)
+                writeLine(from: variation, basePly: basePly, into: &result, depth: depth + 1)
                 result += ") "
             }
-            writeSingleNode(next, into: &result, afterVariation: hasVariations)
+            writeSingleNode(next, basePly: basePly, into: &result, afterVariation: hasVariations)
             current = next
         }
     }
 
-    private static func writeSingleNode(_ node: MoveNode, into result: inout String, afterVariation: Bool) {
-        let ply = node.plyIndex
+    private static func writeSingleNode(_ node: MoveNode, basePly: Int, into result: inout String, afterVariation: Bool) {
+        let ply = node.plyIndex + basePly
         let annotationSuffix = node.annotation?.pgnSuffix ?? ""
         let moveNum = ply / 2 + 1
         if ply % 2 == 0 {
