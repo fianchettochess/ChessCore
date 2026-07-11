@@ -14,7 +14,10 @@ public nonisolated enum UCIParser {
     }
 
     public static func uciToMove(_ uci: String, in legalMoves: [Move]) -> Move? {
-        guard uci.count >= 4 else { return nil }
+        // Coordinate moves are exactly four characters, or five with a
+        // lowercase promotion piece. Prefix parsing would let malformed
+        // backup/engine data such as `e2e4junk` silently select a legal move.
+        guard uci.count == 4 || uci.count == 5 else { return nil }
         let chars = Array(uci)
         guard let fromFile = fileIndex(chars[0]),
               let fromRank = rankIndex(chars[1]),
@@ -24,10 +27,19 @@ public nonisolated enum UCIParser {
         let from = Square(file: fromFile, rank: fromRank)
         let to = Square(file: toFile, rank: toRank)
 
-        var promotion: PieceType?
-        if uci.count == 5 { promotion = promotionType(chars[4]) }
+        let promotion: PieceType?
+        if uci.count == 5 {
+            guard let parsed = promotionType(chars[4]) else { return nil }
+            promotion = parsed
+        } else {
+            promotion = nil
+        }
 
-        return legalMoves.first { $0.from == from && $0.to == to && (promotion == nil || $0.promotion == promotion) }
+        // Equality is intentional: a promotion may not omit its fifth
+        // character, and a non-promotion may not carry a spurious one.
+        return legalMoves.first {
+            $0.from == from && $0.to == to && $0.promotion == promotion
+        }
     }
 
     public static func uciToSAN(_ uci: String, in position: Position) -> String? {

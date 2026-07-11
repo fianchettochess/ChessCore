@@ -333,9 +333,32 @@ public nonisolated struct Position: Equatable, Sendable {
         return fen.split(separator: " ").prefix(4).joined(separator: " ")
     }
 
+    /// Position identity for the threefold-repetition rule.
+    ///
+    /// FEN records an en-passant target after every double pawn push, even when
+    /// no legal en-passant capture exists. Such a target does *not* distinguish
+    /// positions for repetition: the legal moves available to both players are
+    /// unchanged. ``positionKey`` deliberately preserves raw FEN metadata for
+    /// persistence/opening-book callers; this key removes only a non-actionable
+    /// en-passant target and is the key game-history code should use.
+    public var repetitionKey: String {
+        guard enPassantTarget != nil else { return positionKey }
+
+        var normalized = self
+        if capturableEnPassantTarget == nil
+            || !MoveGenerator.legalMoves(for: self).contains(where: \.isEnPassant) {
+            normalized.enPassantTarget = nil
+        }
+        return normalized.positionKey
+    }
+
     public init?(fen: String) {
         let parts = fen.split(separator: " ", omittingEmptySubsequences: false)
-        guard parts.count >= 4 else { return nil }
+        // Accept either a complete six-field FEN or the four-field position
+        // key used by opening/repertoire storage. A five-field or overlong
+        // value is neither representation and previously produced a silently
+        // defaulted clock.
+        guard parts.count == 4 || parts.count == 6 else { return nil }
 
         self.init()
 
@@ -346,8 +369,9 @@ public nonisolated struct Position: Equatable, Sendable {
             let rank = 7 - rankIndex
             var file = 0
             for ch in rankStr {
-                if let digit = ch.wholeNumberValue {
-                    file += digit
+                if let ascii = ch.asciiValue, (49...56).contains(ascii) {
+                    file += Int(ascii - 48)
+                    guard file <= 8 else { return nil }
                 } else {
                     let color: PieceColor = ch.isUppercase ? .white : .black
                     let pieceType: PieceType?
@@ -368,9 +392,20 @@ public nonisolated struct Position: Equatable, Sendable {
             guard file == 8 else { return nil }
         }
 
-        activeColor = parts[1] == "b" ? .black : .white
+        switch parts[1] {
+        case "w": activeColor = .white
+        case "b": activeColor = .black
+        default: return nil
+        }
 
         let castling = String(parts[2])
+        if castling != "-" {
+            let rights = Set(castling)
+            guard !castling.isEmpty,
+                  rights.isSubset(of: Set("KQkq")),
+                  rights.count == castling.count
+            else { return nil }
+        }
         castlingRights = CastlingRights(
             whiteKingside: castling.contains("K"),
             whiteQueenside: castling.contains("Q"),
@@ -379,13 +414,17 @@ public nonisolated struct Position: Equatable, Sendable {
         )
 
         if parts[3] != "-" {
-            enPassantTarget = Square(algebraic: String(parts[3]))
+            guard let target = Square(algebraic: String(parts[3])),
+                  target.rank == (activeColor == .white ? 5 : 2)
+            else { return nil }
+            enPassantTarget = target
         }
 
-        if parts.count > 4, let hmc = Int(parts[4]) {
+        if parts.count == 6 {
+            guard let hmc = Int(parts[4]), hmc >= 0,
+                  let fmn = Int(parts[5]), fmn >= 1
+            else { return nil }
             halfmoveClock = hmc
-        }
-        if parts.count > 5, let fmn = Int(parts[5]) {
             fullmoveNumber = fmn
         }
 
