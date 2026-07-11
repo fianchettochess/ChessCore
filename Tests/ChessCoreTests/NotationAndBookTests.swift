@@ -36,6 +36,16 @@ final class NotationAndBookTests: XCTestCase {
         XCTAssertEqual(UCIParser.uciToSAN("e2e4", in: pos), "e4")
         let move = PGNParser.parseMove("e4", in: pos)
         XCTAssertEqual(move?.uci, "e2e4")
+        XCTAssertNil(UCIParser.uciToMove("e2e4junk", in: pos))
+        XCTAssertNil(UCIParser.uciToMove("e2e4q", in: pos))
+    }
+
+    func testUCIPromotionRequiresAValidExplicitPiece() throws {
+        let position = try XCTUnwrap(Position(fen: "8/4P3/8/8/8/8/8/k6K w - - 0 1"))
+        XCTAssertEqual(UCIParser.uciToMove("e7e8q", in: position)?.promotion, .queen)
+        XCTAssertNil(UCIParser.uciToMove("e7e8", in: position))
+        XCTAssertNil(UCIParser.uciToMove("e7e8x", in: position))
+        XCTAssertNil(UCIParser.uciToMove("e7e8qq", in: position))
     }
 
     func testGameTagCodecRoundTripWithEscapes() {

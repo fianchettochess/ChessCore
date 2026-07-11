@@ -83,6 +83,20 @@ final class GameTests: XCTestCase {
         XCTAssertEqual(g.gameState, .repetition)
     }
 
+    func testThreefoldCountsInitialPhantomEnPassantPosition() {
+        let game = Game()
+        XCTAssertTrue(game.loadFEN("rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"))
+
+        for uci in ["g8f6", "g1f3", "f6g8", "f3g1",
+                    "g8f6", "g1f3", "f6g8", "f3g1"] {
+            let move = UCIParser.uciToMove(uci, in: game.legalMoves)
+            XCTAssertNotNil(move, "expected legal move \(uci)")
+            if let move { game.apply(move) }
+        }
+
+        XCTAssertEqual(game.gameState, .repetition)
+    }
+
     func testVariationEditing() {
         let g = Game()
         g.apply(uci("e2e4", g))

@@ -21,6 +21,35 @@ final class ChessModelTests: XCTestCase {
     func testInvalidFENRejected() {
         XCTAssertNil(Position(fen: "not a fen"))
         XCTAssertNil(Position(fen: "rnbqkbnr/pppppppp/8/8/8 w KQkq - 0 1")) // too few ranks
+        XCTAssertNil(Position(fen: "8/8/8/8/8/8/8/80 w - - 0 1")) // zero is not a FEN run
+        XCTAssertNil(Position(fen: "8/8/8/8/8/8/8/8 x - - 0 1"))
+        XCTAssertNil(Position(fen: "8/8/8/8/8/8/8/8 w K- - 0 1"))
+        XCTAssertNil(Position(fen: "8/8/8/8/8/8/8/8 w KK - 0 1"))
+        XCTAssertNil(Position(fen: "8/8/8/8/8/8/8/8 w - e4 0 1"))
+        XCTAssertNil(Position(fen: "8/8/8/8/8/8/8/8 w - e3 0 1")) // wrong side to capture
+        XCTAssertNil(Position(fen: "8/8/8/8/8/8/8/8 b - e6 0 1")) // wrong side to capture
+        XCTAssertNil(Position(fen: "8/8/8/8/8/8/8/8 w - - -1 1"))
+        XCTAssertNil(Position(fen: "8/8/8/8/8/8/8/8 w - - 0 0"))
+        XCTAssertNil(Position(fen: "8/8/8/8/8/8/8/8 w - - 0"))
+        XCTAssertNil(Position(fen: "8/8/8/8/8/8/8/8 w - - 0 1 trailing"))
+    }
+
+    func testRepetitionKeyNormalizesOnlyNonActionableEnPassant() {
+        let phantom = Position(fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1")!
+        let noTarget = Position(fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1")!
+        XCTAssertNotEqual(phantom.positionKey, noTarget.positionKey)
+        XCTAssertEqual(phantom.repetitionKey, noTarget.repetitionKey)
+
+        let capturable = Position(fen: "4k3/8/8/8/3pP3/8/8/4K3 b - e3 0 1")!
+        let capturableWithoutTarget = Position(fen: "4k3/8/8/8/3pP3/8/8/4K3 b - - 0 1")!
+        XCTAssertNotEqual(capturable.repetitionKey, capturableWithoutTarget.repetitionKey)
+    }
+
+    func testRepetitionKeyIgnoresPinnedEnPassantCapture() {
+        let pinned = Position(fen: "k3r3/8/8/3pP3/8/8/8/4K3 w - d6 0 1")!
+        let noTarget = Position(fen: "k3r3/8/8/3pP3/8/8/8/4K3 w - - 0 1")!
+        XCTAssertFalse(MoveGenerator.legalMoves(for: pinned).contains(where: \.isEnPassant))
+        XCTAssertEqual(pinned.repetitionKey, noTarget.repetitionKey)
     }
 
     func testInsufficientMaterial() {

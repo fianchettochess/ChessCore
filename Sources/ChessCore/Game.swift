@@ -131,14 +131,14 @@ public final class Game {
     }
 
     private var isThreefoldRepetition: Bool {
-        let key = position.positionKey
+        let key = position.repetitionKey
         var count = 1
         let limit = position.halfmoveClock
 
         var node = currentNode
         var steps = 0
         while let n = node, steps < limit {
-            if n.positionBefore.positionKey == key {
+            if n.positionBefore.repetitionKey == key {
                 count += 1
                 if count >= 3 { return true }
             }
@@ -146,7 +146,7 @@ public final class Game {
             steps += 1
         }
 
-        if steps < limit && startPosition.positionKey == key {
+        if steps < limit && startPosition.repetitionKey == key {
             count += 1
         }
         return count >= 3
