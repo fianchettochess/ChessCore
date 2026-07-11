@@ -20,6 +20,35 @@ final class NotationAndBookTests: XCTestCase {
         XCTAssertEqual(game.moves, ["e4", "e5", "Qh5", "Nc6", "Bc4", "Nf6", "Qxf7#"])
     }
 
+    func testPGNParseDropsOverflowedGameWithoutLosingFollowingGame() {
+        let oversized = """
+        [Event "Oversized"]
+        [White "A"]
+        [Black "B"]
+        [Result "*"]
+
+        1. e4 e5 2. Nf3 Nc6
+        3. Bb5 a6 4. Ba4 Nf6
+        """
+        let valid = """
+        [Event "Valid"]
+        [White "C"]
+        [Black "D"]
+        [Result "1-0"]
+
+        1. d4 d5 1-0
+        """
+
+        let games = PGNParser.parse(
+            oversized + "\n" + valid,
+            maximumMoveTextBytes: 24
+        )
+
+        XCTAssertEqual(games.count, 1)
+        XCTAssertEqual(games[0].event, "Valid")
+        XCTAssertEqual(games[0].moves, ["d4", "d5"])
+    }
+
     func testPGNMainLineSnapshotReachesMate() {
         let line = PGNParser.mainLineSnapshot(fromMoveText: "1. e4 e5 2. Qh5 Nc6 3. Bc4 Nf6 4. Qxf7#")
         XCTAssertEqual(line.moves.count, 7)

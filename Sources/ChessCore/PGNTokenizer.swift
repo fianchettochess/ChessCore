@@ -99,31 +99,46 @@ public nonisolated struct ParsedMainLine: Sendable {
 public enum PGNParser {
 
     public nonisolated static func parse(_ pgn: String) -> [PGNGame] {
+        parse(pgn, maximumMoveTextBytes: 8 * 1024 * 1024)
+    }
+
+    /// Internal limit seam keeps oversized-input behavior directly testable
+    /// without allocating multi-megabyte fixtures in the package test suite.
+    nonisolated static func parse(
+        _ pgn: String,
+        maximumMoveTextBytes: Int
+    ) -> [PGNGame] {
+        precondition(maximumMoveTextBytes > 0)
         var games: [PGNGame] = []
         var current = PGNGame()
         var inTags = false
-        var moveText = ""
+        var moveTextLines: [String] = []
+        var moveTextByteCount = 0
 
         // Defensive upper bound on a single game's move-text accumulation.
         // No real PGN reaches anywhere near 8 MB of moves (a 1000-move game is
-        // a few KB); past this point the input is either pathological or
-        // attacker-supplied and we'd rather drop the rest of the game than
-        // unbounded-allocate.
-        let maxMoveTextBytes = 8 * 1024 * 1024
+        // a few KB). Accumulate lines and join once so a near-limit game stays
+        // linear rather than repeatedly copying/recounting a growing String.
+        // An overflowed game is discarded whole; returning its truncated prefix
+        // would manufacture a valid-looking but incomplete game.
         var moveTextOverflow = false
 
         for line in pgn.components(separatedBy: .newlines) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
 
             if trimmed.hasPrefix("[") && trimmed.hasSuffix("]") {
-                if !moveText.isEmpty {
-                    let tokens = tokenize(moveText)
-                    current.moves = flatMoves(from: tokens)
-                    current.moveTokens = tokens
-                    current.result = extractResult(from: moveText)
-                    games.append(current)
+                if !moveTextLines.isEmpty || moveTextOverflow {
+                    if !moveTextOverflow {
+                        let moveText = moveTextLines.joined(separator: " ")
+                        let tokens = tokenize(moveText)
+                        current.moves = flatMoves(from: tokens)
+                        current.moveTokens = tokens
+                        current.result = extractResult(from: moveText)
+                        games.append(current)
+                    }
                     current = PGNGame()
-                    moveText = ""
+                    moveTextLines.removeAll(keepingCapacity: true)
+                    moveTextByteCount = 0
                     moveTextOverflow = false
                 }
                 inTags = true
@@ -134,15 +149,21 @@ public enum PGNParser {
                 inTags = false
             } else if !inTags {
                 if moveTextOverflow { continue }
-                if moveText.utf8.count + trimmed.utf8.count + 1 > maxMoveTextBytes {
+                let separatorBytes = moveTextLines.isEmpty ? 0 : 1
+                let nextLineBytes = trimmed.utf8.count
+                if moveTextByteCount + separatorBytes + nextLineBytes > maximumMoveTextBytes {
                     moveTextOverflow = true
+                    moveTextLines.removeAll(keepingCapacity: false)
+                    moveTextByteCount = 0
                     continue
                 }
-                moveText += " " + trimmed
+                moveTextLines.append(trimmed)
+                moveTextByteCount += separatorBytes + nextLineBytes
             }
         }
 
-        if !moveText.isEmpty || !current.tags.isEmpty {
+        if !moveTextOverflow && (!moveTextLines.isEmpty || !current.tags.isEmpty) {
+            let moveText = moveTextLines.joined(separator: " ")
             let tokens = tokenize(moveText)
             current.moves = flatMoves(from: tokens)
             current.moveTokens = tokens
