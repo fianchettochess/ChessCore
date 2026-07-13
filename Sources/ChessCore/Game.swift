@@ -444,6 +444,27 @@ public final class Game {
         return true
     }
 
+    /// Replace this game from a versioned, lossless move-tree snapshot.
+    ///
+    /// Materialization happens into local storage first. Any unsupported
+    /// schema, malformed parent relation, illegal move, or resource-limit
+    /// failure throws without changing the receiver.
+    public func restore(
+        from snapshot: GameTreeSnapshot,
+        maximumNodes: Int = PGNParser.maximumMoveTreeNodes
+    ) throws {
+        let restored = try snapshot.materialize(
+            maximumNodes: maximumNodes
+        )
+        startPosition = restored.startPosition
+        position = restored.currentNode?.positionAfter
+            ?? restored.startPosition
+        rootChildren = restored.roots
+        currentNode = restored.currentNode
+        loadedTags = restored.loadedTags
+        bumpTreeMutation()
+    }
+
     public func loadFEN(_ fen: String) -> Bool {
         guard let pos = Position(fen: fen) else { return false }
         startPosition = pos
