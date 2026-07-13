@@ -9,9 +9,20 @@ import Foundation
 /// parent indexes so encoding and decoding do not recurse through the tree.
 public nonisolated struct GameTreeSnapshot: Codable, Equatable, Sendable {
     public static let currentSchemaVersion = 2
+    /// Practical defense against tiny-object amplification during JSON decode.
+    public static let maximumLoadedTagPairs = 4_096
+
+    /// Explicit admission prevents a future schema-version bump from silently
+    /// accepting a wire format whose decoder and resource policy are not ready.
+    public static func supportsSchemaVersion(_ version: Int) -> Bool {
+        switch version {
+        case 1, 2: true
+        default: false
+        }
+    }
 
     /// One ordered PGN tag pair. An array is used instead of a JSON object so
-    /// canonical roster order and custom-tag order survive every encoder.
+    /// the model's exact tag insertion order survives every encoder.
     public nonisolated struct Tag: Codable, Equatable, Sendable {
         public let key: String
         public let value: String
@@ -93,8 +104,10 @@ public nonisolated struct GameTreeSnapshot: Codable, Equatable, Sendable {
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         schemaVersion = try values.decode(Int.self, forKey: .schemaVersion)
+        guard Self.supportsSchemaVersion(schemaVersion) else {
+            throw GameTreeSnapshotError.unsupportedSchemaVersion(schemaVersion)
+        }
         startFEN = try values.decode(String.self, forKey: .startFEN)
-        nodes = try values.decode([Node].self, forKey: .nodes)
         currentNodeIndex = try values.decodeIfPresent(
             Int.self,
             forKey: .currentNodeIndex
@@ -103,26 +116,55 @@ public nonisolated struct GameTreeSnapshot: Codable, Equatable, Sendable {
             loadedTags = nil
         } else if try values.decodeNil(forKey: .loadedTags) {
             loadedTags = nil
-        } else {
-            do {
-                loadedTags = try values.decode(
-                    [Tag].self,
-                    forKey: .loadedTags
-                )
-            } catch let structuredError {
-                guard schemaVersion == 1,
-                      let legacy = try? values.decode(
-                        String.self,
-                        forKey: .loadedTags
-                      ) else {
-                    throw structuredError
-                }
-                let decoded = GameTagCodec.decodeOrdered(legacy)
-                loadedTags = decoded.orderedKeys.compactMap { key in
-                    decoded[key].map { Tag(key: key, value: $0) }
-                }
+        } else if schemaVersion == 1 {
+            let legacy = try values.decode(String.self, forKey: .loadedTags)
+            let decoded = GameTagCodec.decodeOrdered(legacy)
+            guard GameTagCodec.encode(decoded) == legacy else {
+                throw GameTreeSnapshotError.invalidLegacyTagEncoding
             }
+            loadedTags = decoded.insertionOrderedKeys.compactMap { key in
+                decoded[key].map { Tag(key: key, value: $0) }
+            }
+        } else {
+            loadedTags = try Self.decodeBoundedArray(
+                Tag.self,
+                from: values,
+                forKey: .loadedTags,
+                maximumCount: Self.maximumLoadedTagPairs,
+                limitError: .tagLimitExceeded(
+                    maximumTags: Self.maximumLoadedTagPairs
+                )
+            )
         }
+        nodes = try Self.decodeBoundedArray(
+            Node.self,
+            from: values,
+            forKey: .nodes,
+            maximumCount: PGNParser.maximumMoveTreeNodes,
+            limitError: .nodeLimitExceeded(
+                maximumNodes: PGNParser.maximumMoveTreeNodes
+            )
+        )
+    }
+
+    private static func decodeBoundedArray<Element: Decodable>(
+        _ elementType: Element.Type,
+        from values: KeyedDecodingContainer<CodingKeys>,
+        forKey key: CodingKeys,
+        maximumCount: Int,
+        limitError: GameTreeSnapshotError
+    ) throws -> [Element] {
+        var container = try values.nestedUnkeyedContainer(forKey: key)
+        if let count = container.count, count > maximumCount {
+            throw limitError
+        }
+        var result: [Element] = []
+        result.reserveCapacity(min(container.count ?? 0, maximumCount))
+        while !container.isAtEnd {
+            guard result.count < maximumCount else { throw limitError }
+            result.append(try container.decode(elementType))
+        }
+        return result
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -212,7 +254,7 @@ public nonisolated struct GameTreeSnapshot: Codable, Equatable, Sendable {
         self.init(
             startFEN: game.startPosition.fen,
             loadedTags: game.loadedTags.map { tags in
-                tags.orderedKeys.compactMap { key in
+                tags.insertionOrderedKeys.compactMap { key in
                     tags[key].map { Tag(key: key, value: $0) }
                 }
             },
@@ -231,7 +273,7 @@ public nonisolated struct GameTreeSnapshot: Codable, Equatable, Sendable {
     func materialize(
         maximumNodes: Int
     ) throws -> MaterializedTree {
-        guard (1...Self.currentSchemaVersion).contains(schemaVersion) else {
+        guard Self.supportsSchemaVersion(schemaVersion) else {
             throw GameTreeSnapshotError.unsupportedSchemaVersion(
                 schemaVersion
             )
@@ -362,6 +404,11 @@ public nonisolated struct GameTreeSnapshot: Codable, Equatable, Sendable {
 
     private func materializeLoadedTags() throws -> PGNGame.OrderedTags? {
         if let loadedTags {
+            guard loadedTags.count <= Self.maximumLoadedTagPairs else {
+                throw GameTreeSnapshotError.tagLimitExceeded(
+                    maximumTags: Self.maximumLoadedTagPairs
+                )
+            }
             var tags = PGNGame.OrderedTags()
             var seen = Set<String>()
             for (index, tag) in loadedTags.enumerated() {
@@ -397,6 +444,8 @@ public nonisolated enum GameTreeSnapshotError: Error, Equatable, Sendable {
     case illegalMove(nodeIndex: Int, moveUCI: String)
     case invalidAnnotation(nodeIndex: Int, rawValue: String)
     case invalidMoveQuality(nodeIndex: Int, rawValue: String)
+    case invalidLegacyTagEncoding
+    case tagLimitExceeded(maximumTags: Int)
     case emptyTagKey(index: Int)
     case duplicateTagKey(index: Int, key: String)
 }
