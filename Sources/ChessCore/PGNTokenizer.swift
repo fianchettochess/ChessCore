@@ -523,9 +523,34 @@ public enum PGNParser {
         else { return nil }
 
         let key = content[content.startIndex..<quoteStart].trimmingCharacters(in: .whitespaces)
-        let value = String(content[content.index(after: quoteStart)..<quoteEnd])
+        let value = unescapeTagValue(content[content.index(after: quoteStart)..<quoteEnd])
 
         return (key, value)
+    }
+
+    /// Undo §8.1 string-token escaping: `\\` → `\` and `\"` → `"`. Any other
+    /// backslash is kept literally (lenient — matches real-world PGN that
+    /// never escaped anything). Counterpart of the exporter's escaping so
+    /// export → import round-trips preserve tag values exactly.
+    nonisolated private static func unescapeTagValue(_ raw: Substring) -> String {
+        guard raw.contains("\\") else { return String(raw) }
+        var result = String()
+        result.reserveCapacity(raw.count)
+        var idx = raw.startIndex
+        while idx < raw.endIndex {
+            let ch = raw[idx]
+            if ch == "\\" {
+                let next = raw.index(after: idx)
+                if next < raw.endIndex, raw[next] == "\\" || raw[next] == "\"" {
+                    result.append(raw[next])
+                    idx = raw.index(after: next)
+                    continue
+                }
+            }
+            result.append(ch)
+            idx = raw.index(after: idx)
+        }
+        return result
     }
 
     nonisolated private static func extractResult(from text: String) -> String? {

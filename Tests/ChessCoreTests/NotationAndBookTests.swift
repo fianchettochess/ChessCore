@@ -119,6 +119,27 @@ final class NotationAndBookTests: XCTestCase {
                        "every SAN must parse relative to the FEN start")
     }
 
+    func testExportEscapesQuoteAndBackslashInTagValues() {
+        // Regression: the exporter emitted tag values verbatim, so a quote or
+        // backslash produced out-of-spec PGN (§8.1: '\' and '"' must be
+        // escaped) whose header string terminates early in conforming
+        // readers (SCID, python-chess, Lichess).
+        let raw = #"He said "hi" \ once"#
+        let game = Game()
+        var tags = PGNGame.OrderedTags()
+        tags["Event"] = "Escaping"
+        tags["White"] = raw
+
+        let exported = PGNExporter.export(game: game, tags: tags)
+        XCTAssertTrue(exported.contains(#"[White "He said \"hi\" \\ once"]"#),
+                      "tag value must be §8.1-escaped on export, got: \(exported)")
+
+        // Round-trip through our own parser must recover the original value.
+        let reparsed = PGNParser.parse(exported)
+        XCTAssertEqual(reparsed.count, 1)
+        XCTAssertEqual(reparsed[0].white, raw)
+    }
+
     func testSANUCIRoundTrip() {
         let pos = Position.initial()
         // e4 as SAN -> Move -> UCI
