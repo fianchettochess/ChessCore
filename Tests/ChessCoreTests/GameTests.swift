@@ -202,6 +202,30 @@ final class GameTests: XCTestCase {
         XCTAssertTrue(mid.children.first === leaf, "externally-held subtree must survive head release")
     }
 
+    func testPGNMoveTreeNodeLimitReportsExplicitError() throws {
+        // Five total nodes: main line e4-e5-Nf3 plus the root variation d4-d5.
+        // The bound counts the WHOLE tree, not only main-line plies.
+        let pgn = "1. e4 (1. d4 d5) e5 2. Nf3 *"
+        let parsed = try XCTUnwrap(PGNParser.parse(pgn).first)
+
+        XCTAssertThrowsError(
+            try PGNParser.loadGame(from: parsed, maximumTreeNodes: 4)
+        ) { error in
+            XCTAssertEqual(
+                error as? PGNDiagnostic,
+                .moveTreeNodeLimitExceeded(maximumNodes: 4)
+            )
+        }
+
+        let exactFit = try PGNParser.loadGame(
+            from: parsed,
+            maximumTreeNodes: 5
+        )
+        XCTAssertEqual(exactFit.mainLine.map(\.notation), ["e4", "e5", "Nf3"])
+        XCTAssertEqual(exactFit.rootChildren.count, 2,
+                       "the d4 variation must participate in the node budget")
+    }
+
     func testVariationEditing() {
         let g = Game()
         g.apply(uci("e2e4", g))
