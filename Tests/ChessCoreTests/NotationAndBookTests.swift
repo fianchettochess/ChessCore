@@ -99,6 +99,26 @@ final class NotationAndBookTests: XCTestCase {
         XCTAssertFalse(MoveGenerator.hasAnyLegalMove(for: mate.positionAfter))
     }
 
+    func testParseMainLineSnapshotHonorsFENTag() {
+        // Regression: parseMainLineSnapshot pinned Position.initial() even
+        // when the game carries a [FEN] tag (which loadGame honors). SANs of
+        // FEN-setup games were parsed against the wrong board and silently
+        // dropped, yielding an empty/desynced mainline.
+        let pgn = """
+        [SetUp "1"]
+        [FEN "8/8/4k3/8/8/4K3/8/R7 w - - 0 1"]
+
+        1. Ra6+ Kf5 2. Kf3 *
+        """
+        let games = PGNParser.parse(pgn)
+        XCTAssertEqual(games.count, 1)
+        let parsed = PGNParser.parseMainLineSnapshot(from: games[0])
+        XCTAssertEqual(parsed.startPosition.fen, "8/8/4k3/8/8/4K3/8/R7 w - - 0 1",
+                       "snapshot must start from the [FEN] tag position")
+        XCTAssertEqual(parsed.moves.map(\.notation), ["Ra6+", "Kf5", "Kf3"],
+                       "every SAN must parse relative to the FEN start")
+    }
+
     func testSANUCIRoundTrip() {
         let pos = Position.initial()
         // e4 as SAN -> Move -> UCI
