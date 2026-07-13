@@ -140,7 +140,7 @@ extension PGNExporter {
 
         for key in exportTags.orderedKeys {
             if let value = exportTags[key] {
-                lines.append("[\(key) \"\(value)\"]")
+                lines.append("[\(key) \"\(pgnEscapedTagValue(value))\"]")
             }
         }
 
@@ -290,6 +290,16 @@ extension PGNExporter {
         }
 
         result += "} "
+    }
+
+    /// PGN string-token escaping (§8.1 of the PGN spec): backslash must be
+    /// escaped before quote so a single backslash in the input doesn't
+    /// accidentally escape the following character. Without this, a quote or
+    /// backslash in a tag value emitted out-of-spec PGN whose header string
+    /// terminates early in conforming readers (SCID, python-chess, Lichess).
+    private static func pgnEscapedTagValue(_ value: String) -> String {
+        value.replacingOccurrences(of: "\\", with: "\\\\")
+             .replacingOccurrences(of: "\"", with: "\\\"")
     }
 
     private static func defaultTags(for game: Game) -> PGNGame.OrderedTags {
