@@ -49,6 +49,48 @@ final class NotationAndBookTests: XCTestCase {
         XCTAssertEqual(games[0].moves, ["d4", "d5"])
     }
 
+    func testPGNParseMovetextWithoutBlankLineAfterTags() {
+        // Regression: inTags was only cleared by an empty line, so movetext
+        // that directly follows the headers (hand-edited / web-copied PGN)
+        // was silently dropped — tags imported with ZERO moves.
+        let pgn = """
+        [Event "Test"]
+        [White "A"]
+        [Black "B"]
+        [Result "1-0"]
+        1. e4 e5 2. Qh5 Nc6 3. Bc4 Nf6 4. Qxf7# 1-0
+        """
+        let games = PGNParser.parse(pgn)
+        XCTAssertEqual(games.count, 1)
+        XCTAssertEqual(games[0].white, "A")
+        XCTAssertEqual(games[0].result, "1-0")
+        XCTAssertEqual(games[0].moves, ["e4", "e5", "Qh5", "Nc6", "Bc4", "Nf6", "Qxf7#"])
+    }
+
+    func testPGNParseTwoConcatenatedGamesWithoutBlankSeparators() {
+        // Regression companion: consecutive no-blank-line games used to merge
+        // their tag sections into one PGNGame. They must parse as TWO games,
+        // each with its own tags and moves.
+        let pgn = """
+        [Event "First"]
+        [White "A"]
+        1. e4 e5 1-0
+        [Event "Second"]
+        [White "C"]
+        1. d4 d5 0-1
+        """
+        let games = PGNParser.parse(pgn)
+        XCTAssertEqual(games.count, 2)
+        XCTAssertEqual(games[0].event, "First")
+        XCTAssertEqual(games[0].white, "A")
+        XCTAssertEqual(games[0].moves, ["e4", "e5"])
+        XCTAssertEqual(games[0].result, "1-0")
+        XCTAssertEqual(games[1].event, "Second")
+        XCTAssertEqual(games[1].white, "C")
+        XCTAssertEqual(games[1].moves, ["d4", "d5"])
+        XCTAssertEqual(games[1].result, "0-1")
+    }
+
     func testPGNMainLineSnapshotReachesMate() {
         let line = PGNParser.mainLineSnapshot(fromMoveText: "1. e4 e5 2. Qh5 Nc6 3. Bc4 Nf6 4. Qxf7#")
         XCTAssertEqual(line.moves.count, 7)
