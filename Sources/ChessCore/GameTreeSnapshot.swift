@@ -8,7 +8,19 @@ import Foundation
 /// variation depth. This snapshot keeps authored node fields distinct and uses
 /// parent indexes so encoding and decoding do not recurse through the tree.
 public nonisolated struct GameTreeSnapshot: Codable, Equatable, Sendable {
-    public static let currentSchemaVersion = 1
+    public static let currentSchemaVersion = 2
+
+    /// One ordered PGN tag pair. An array is used instead of a JSON object so
+    /// canonical roster order and custom-tag order survive every encoder.
+    public nonisolated struct Tag: Codable, Equatable, Sendable {
+        public let key: String
+        public let value: String
+
+        public init(key: String, value: String) {
+            self.key = key
+            self.value = value
+        }
+    }
 
     public nonisolated struct Node: Codable, Equatable, Sendable {
         public let parentIndex: Int?
@@ -49,14 +61,14 @@ public nonisolated struct GameTreeSnapshot: Codable, Equatable, Sendable {
     public let schemaVersion: Int
     public let startFEN: String
     /// `nil` and an explicitly empty tag collection remain distinguishable.
-    public let loadedTags: String?
+    public let loadedTags: [Tag]?
     public let nodes: [Node]
     public let currentNodeIndex: Int?
 
     public init(
         schemaVersion: Int = Self.currentSchemaVersion,
         startFEN: String,
-        loadedTags: String?,
+        loadedTags: [Tag]?,
         nodes: [Node],
         currentNodeIndex: Int?
     ) {
@@ -65,6 +77,69 @@ public nonisolated struct GameTreeSnapshot: Codable, Equatable, Sendable {
         self.loadedTags = loadedTags
         self.nodes = nodes
         self.currentNodeIndex = currentNodeIndex
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion
+        case startFEN
+        case loadedTags
+        case nodes
+        case currentNodeIndex
+    }
+
+    /// Schema 1 encoded tags through `GameTagCodec`. Decode that representation
+    /// for crash-recovery migration, while every newly captured snapshot uses
+    /// structured schema-2 pairs.
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        schemaVersion = try values.decode(Int.self, forKey: .schemaVersion)
+        startFEN = try values.decode(String.self, forKey: .startFEN)
+        nodes = try values.decode([Node].self, forKey: .nodes)
+        currentNodeIndex = try values.decodeIfPresent(
+            Int.self,
+            forKey: .currentNodeIndex
+        )
+        if !values.contains(.loadedTags) {
+            loadedTags = nil
+        } else if try values.decodeNil(forKey: .loadedTags) {
+            loadedTags = nil
+        } else {
+            do {
+                loadedTags = try values.decode(
+                    [Tag].self,
+                    forKey: .loadedTags
+                )
+            } catch let structuredError {
+                guard schemaVersion == 1,
+                      let legacy = try? values.decode(
+                        String.self,
+                        forKey: .loadedTags
+                      ) else {
+                    throw structuredError
+                }
+                let decoded = GameTagCodec.decodeOrdered(legacy)
+                loadedTags = decoded.orderedKeys.compactMap { key in
+                    decoded[key].map { Tag(key: key, value: $0) }
+                }
+            }
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(schemaVersion, forKey: .schemaVersion)
+        try values.encode(startFEN, forKey: .startFEN)
+        if schemaVersion == 1,
+           let legacyTags = try materializeLoadedTags() {
+            try values.encode(
+                GameTagCodec.encode(legacyTags),
+                forKey: .loadedTags
+            )
+        } else {
+            try values.encodeIfPresent(loadedTags, forKey: .loadedTags)
+        }
+        try values.encode(nodes, forKey: .nodes)
+        try values.encodeIfPresent(currentNodeIndex, forKey: .currentNodeIndex)
     }
 
     /// Capture one live tree iteratively. Repeated node references are rejected:
@@ -136,7 +211,11 @@ public nonisolated struct GameTreeSnapshot: Codable, Equatable, Sendable {
 
         self.init(
             startFEN: game.startPosition.fen,
-            loadedTags: game.loadedTags.map(GameTagCodec.encode),
+            loadedTags: game.loadedTags.map { tags in
+                tags.orderedKeys.compactMap { key in
+                    tags[key].map { Tag(key: key, value: $0) }
+                }
+            },
             nodes: records,
             currentNodeIndex: capturedCurrentIndex
         )
@@ -152,7 +231,7 @@ public nonisolated struct GameTreeSnapshot: Codable, Equatable, Sendable {
     func materialize(
         maximumNodes: Int
     ) throws -> MaterializedTree {
-        guard schemaVersion == Self.currentSchemaVersion else {
+        guard (1...Self.currentSchemaVersion).contains(schemaVersion) else {
             throw GameTreeSnapshotError.unsupportedSchemaVersion(
                 schemaVersion
             )
@@ -174,6 +253,7 @@ public nonisolated struct GameTreeSnapshot: Codable, Equatable, Sendable {
                 currentNodeIndex
             )
         }
+        let decodedLoadedTags = try materializeLoadedTags()
 
         var built: [MoveNode] = []
         built.reserveCapacity(nodes.count)
@@ -276,8 +356,29 @@ public nonisolated struct GameTreeSnapshot: Codable, Equatable, Sendable {
             startPosition: start,
             roots: roots,
             currentNode: currentNodeIndex.map { built[$0] },
-            loadedTags: loadedTags.map(GameTagCodec.decodeOrdered)
+            loadedTags: decodedLoadedTags
         )
+    }
+
+    private func materializeLoadedTags() throws -> PGNGame.OrderedTags? {
+        if let loadedTags {
+            var tags = PGNGame.OrderedTags()
+            var seen = Set<String>()
+            for (index, tag) in loadedTags.enumerated() {
+                guard !tag.key.isEmpty else {
+                    throw GameTreeSnapshotError.emptyTagKey(index: index)
+                }
+                guard seen.insert(tag.key).inserted else {
+                    throw GameTreeSnapshotError.duplicateTagKey(
+                        index: index,
+                        key: tag.key
+                    )
+                }
+                tags[tag.key] = tag.value
+            }
+            return tags
+        }
+        return nil
     }
 }
 
@@ -296,4 +397,6 @@ public nonisolated enum GameTreeSnapshotError: Error, Equatable, Sendable {
     case illegalMove(nodeIndex: Int, moveUCI: String)
     case invalidAnnotation(nodeIndex: Int, rawValue: String)
     case invalidMoveQuality(nodeIndex: Int, rawValue: String)
+    case emptyTagKey(index: Int)
+    case duplicateTagKey(index: Int, key: String)
 }

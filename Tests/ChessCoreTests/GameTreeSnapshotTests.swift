@@ -115,6 +115,89 @@ struct GameTreeSnapshotTests {
         #expect(try GameTreeSnapshot(capturing: receiver) == before)
     }
 
+    @Test func structuredTagsEncodeInOrderAndDecodeLegacySchema() throws {
+        let game = Game()
+        var tags = PGNGame.OrderedTags()
+        tags["Event"] = "Structured"
+        tags["Custom_Key"] = "value;with\\escapes"
+        game.loadedTags = tags
+        let move = try #require(UCIParser.uciToMove("e2e4", in: game.position))
+        game.apply(move)
+
+        let current = try GameTreeSnapshot(capturing: game)
+        let encoded = try JSONEncoder().encode(current)
+        let object = try #require(
+            JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        )
+        #expect(object["schemaVersion"] as? Int
+            == GameTreeSnapshot.currentSchemaVersion)
+        let encodedTags = try #require(
+            object["loadedTags"] as? [[String: Any]]
+        )
+        #expect(encodedTags.map { $0["key"] as? String }
+            == ["Event", "Custom_Key"])
+
+        let legacyObject: [String: Any] = [
+            "schemaVersion": 1,
+            "startFEN": Position.initial().fen,
+            "loadedTags": GameTagCodec.encode(tags),
+            "nodes": [],
+        ]
+        let legacyData = try JSONSerialization.data(
+            withJSONObject: legacyObject
+        )
+        let migrated = try JSONDecoder().decode(
+            GameTreeSnapshot.self,
+            from: legacyData
+        )
+        let restored = Game()
+        try restored.restore(from: migrated)
+        #expect(restored.loadedTags == tags)
+        let migratedBytes = try JSONEncoder().encode(migrated)
+        let migratedObject = try #require(
+            JSONSerialization.jsonObject(with: migratedBytes)
+                as? [String: Any]
+        )
+        #expect(migratedObject["schemaVersion"] as? Int == 1)
+        #expect(migratedObject["loadedTags"] as? String
+            == GameTagCodec.encode(tags))
+
+        let currentRestored = Game()
+        try currentRestored.restore(from: current)
+        let exported = currentRestored.exportPGN()
+        let reparsed = try #require(PGNParser.parse(exported).first)
+        #expect(reparsed.tags == tags)
+        #expect(reparsed.moves == ["e4"])
+    }
+
+    @Test func rejectsMalformedStructuredTags() {
+        let emptyKey = GameTreeSnapshot(
+            startFEN: Position.initial().fen,
+            loadedTags: [.init(key: "", value: "value")],
+            nodes: [],
+            currentNodeIndex: nil
+        )
+        #expect(throws: GameTreeSnapshotError.emptyTagKey(index: 0)) {
+            try Game().restore(from: emptyKey)
+        }
+
+        let duplicate = GameTreeSnapshot(
+            startFEN: Position.initial().fen,
+            loadedTags: [
+                .init(key: "Event", value: "First"),
+                .init(key: "Event", value: "Second"),
+            ],
+            nodes: [],
+            currentNodeIndex: nil
+        )
+        #expect(throws: GameTreeSnapshotError.duplicateTagKey(
+            index: 1,
+            key: "Event"
+        )) {
+            try Game().restore(from: duplicate)
+        }
+    }
+
     @Test func rejectsForwardParentsDuplicateSiblingsAndIllegalMoves() {
         let start = Position.initial().fen
         let forwardParent = GameTreeSnapshot(
