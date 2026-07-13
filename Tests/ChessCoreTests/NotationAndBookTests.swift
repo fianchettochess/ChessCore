@@ -91,6 +91,70 @@ final class NotationAndBookTests: XCTestCase {
         XCTAssertEqual(games[1].result, "0-1")
     }
 
+    // MARK: - C10: tags-only records surface a structured diagnostic
+
+    func testPGNParseConformingSeparationHasNoDiagnostics() {
+        let pgn = """
+        [Event "Test"]
+        [Result "1-0"]
+
+        1. e4 e5 1-0
+        """
+        let games = PGNParser.parse(pgn)
+        XCTAssertEqual(games.count, 1)
+        XCTAssertEqual(games[0].moves, ["e4", "e5"])
+        XCTAssertTrue(games[0].diagnostics.isEmpty,
+                      "a conforming record must carry no diagnostics")
+    }
+
+    func testPGNParseTagsOnlyRecordSurfacesDiagnostic() {
+        // A record with tags but NO movetext at all previously reported a
+        // successful zero-move import, indistinguishable from a real (if
+        // odd) empty game. The lenient parse still returns the game — the
+        // structured diagnostic is the distinguisher.
+        let pgn = """
+        [Event "Header only"]
+        [White "A"]
+        [Black "B"]
+        """
+        let games = PGNParser.parse(pgn)
+        XCTAssertEqual(games.count, 1)
+        XCTAssertEqual(games[0].event, "Header only")
+        XCTAssertTrue(games[0].moves.isEmpty)
+        XCTAssertEqual(games[0].diagnostics, [.tagsOnlyRecord],
+                       "tags-only record must be flagged, not silently 'imported'")
+    }
+
+    func testPGNParseResultOnlyMovetextIsNotTagsOnly() {
+        // An explicitly terminated zero-move game ('*' movetext) is a
+        // CONFORMING empty game — it must not be confused with tags-only.
+        let pgn = """
+        [Event "Agreed nothing"]
+
+        *
+        """
+        let games = PGNParser.parse(pgn)
+        XCTAssertEqual(games.count, 1)
+        XCTAssertTrue(games[0].moves.isEmpty)
+        XCTAssertEqual(games[0].result, "*")
+        XCTAssertTrue(games[0].diagnostics.isEmpty,
+                      "result-only movetext is a real (empty) game, not a tags-only record")
+    }
+
+    func testPGNParseCommentsHeavyMovetextHasNoDiagnostics() {
+        let pgn = """
+        [Event "Commented"]
+
+        {pre-game note} 1. e4 {King's pawn} e5 {symmetry}
+        2. Nf3 {developing; best e7e5} Nc6 {book} *
+        """
+        let games = PGNParser.parse(pgn)
+        XCTAssertEqual(games.count, 1)
+        XCTAssertEqual(games[0].moves, ["e4", "e5", "Nf3", "Nc6"])
+        XCTAssertTrue(games[0].diagnostics.isEmpty,
+                      "comments-heavy movetext parses moves and carries no diagnostics")
+    }
+
     func testPGNMainLineSnapshotReachesMate() {
         let line = PGNParser.mainLineSnapshot(fromMoveText: "1. e4 e5 2. Qh5 Nc6 3. Bc4 Nf6 4. Qxf7#")
         XCTAssertEqual(line.moves.count, 7)

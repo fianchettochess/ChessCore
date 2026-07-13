@@ -1,5 +1,15 @@
 import Foundation
 
+/// Structured, non-fatal issues discovered while parsing PGN input.
+///
+/// Parsing remains lenient for interoperability, but callers can distinguish a
+/// deliberately empty game from input that could otherwise look successfully
+/// parsed after content was missing or rejected.
+public nonisolated enum PGNDiagnostic: Error, Equatable, Sendable {
+    /// A tag roster was present but the record contained no movetext at all.
+    case tagsOnlyRecord
+}
+
 // MARK: - PGN Game model
 
 public nonisolated struct PGNGame: Identifiable, Sendable {
@@ -8,6 +18,7 @@ public nonisolated struct PGNGame: Identifiable, Sendable {
     public var moves: [String] = []
     public var result: String? = nil
     public var moveTokens: [PGNToken] = []
+    public var diagnostics: [PGNDiagnostic] = []
 
     public nonisolated init() {}
 
@@ -111,7 +122,6 @@ public enum PGNParser {
         precondition(maximumMoveTextBytes > 0)
         var games: [PGNGame] = []
         var current = PGNGame()
-        var inTags = false
         var moveTextLines: [String] = []
         var moveTextByteCount = 0
 
@@ -141,18 +151,16 @@ public enum PGNParser {
                     moveTextByteCount = 0
                     moveTextOverflow = false
                 }
-                inTags = true
                 if let (key, value) = parseTag(trimmed) {
                     current.tags[key] = value
                 }
             } else if trimmed.isEmpty {
-                inTags = false
+                continue
             } else {
                 // A non-empty, non-tag line ends the tag section even without
                 // the spec's blank separator line — hand-edited / concatenated
                 // PGNs often omit it. Previously such movetext was silently
                 // dropped (tags-only games) and consecutive games merged.
-                inTags = false
                 if moveTextOverflow { continue }
                 let separatorBytes = moveTextLines.isEmpty ? 0 : 1
                 let nextLineBytes = trimmed.utf8.count
@@ -168,6 +176,9 @@ public enum PGNParser {
         }
 
         if !moveTextOverflow && (!moveTextLines.isEmpty || !current.tags.isEmpty) {
+            if moveTextLines.isEmpty && !current.tags.isEmpty {
+                current.diagnostics.append(.tagsOnlyRecord)
+            }
             let moveText = moveTextLines.joined(separator: " ")
             let tokens = tokenize(moveText)
             current.moves = flatMoves(from: tokens)
