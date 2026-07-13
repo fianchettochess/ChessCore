@@ -18,13 +18,11 @@ extension PGNParser {
     public static func loadGame(from pgnGame: PGNGame) -> Game? {
         let game = Game()
 
-        // Honour SetUp/FEN: if the PGN specifies a non-initial start position,
-        // seed the game from that FEN before building the move tree so every
-        // SAN is parsed relative to the real starting board. For standard-start
-        // games (no FEN tag) this branch is skipped — behaviour is identical to
-        // before. Returns nil if the FEN is syntactically invalid.
-        if let fen = pgnGame.tags["FEN"], !fen.isEmpty {
-            guard game.loadFEN(fen) else { return nil }
+        // Share the snapshot parser's FEN interpretation so the two public PGN
+        // paths cannot drift on empty, valid, or invalid setup tags.
+        guard let startPosition = startingPosition(for: pgnGame) else { return nil }
+        if pgnGame.tags["FEN"]?.isEmpty == false {
+            guard game.loadFEN(startPosition.fen) else { return nil }
         }
 
         if pgnGame.moveTokens.isEmpty {
