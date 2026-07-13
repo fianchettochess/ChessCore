@@ -135,6 +135,11 @@ public final class Game {
         var count = 1
         let limit = position.halfmoveClock
 
+        // Walk node.positionBefore up the tree. The root node's positionBefore
+        // IS startPosition, so exhausting the tree already counts the start
+        // position — no post-loop startPosition check (it double-counted the
+        // start whenever steps < limit, i.e. any FEN start with a nonzero
+        // halfmove clock, declaring .repetition after only two occurrences).
         var node = currentNode
         var steps = 0
         while let n = node, steps < limit {
@@ -146,9 +151,6 @@ public final class Game {
             steps += 1
         }
 
-        if steps < limit && startPosition.repetitionKey == key {
-            count += 1
-        }
         return count >= 3
     }
 
