@@ -303,11 +303,23 @@ final class NotationAndBookTests: XCTestCase {
         var tags = PGNGame.OrderedTags()
         tags["White"] = "Carlsen, Magnus"
         tags["Note"] = #"semis; with = and \ backslash"#  // exercises ; = \ escaping
+        tags[#"Custom;Key=Part\Tail"#] = #"value;with=delimiters\"#
         let encoded = GameTagCodec.encode(tags)
         let decoded = GameTagCodec.decode(encoded)
         XCTAssertEqual(decoded["White"], "Carlsen, Magnus")
         XCTAssertEqual(decoded["Note"], #"semis; with = and \ backslash"#)
+        XCTAssertEqual(
+            decoded[#"Custom;Key=Part\Tail"#],
+            #"value;with=delimiters\"#
+        )
         XCTAssertEqual(GameTagCodec.firstValue(forKey: "White", in: encoded), "Carlsen, Magnus")
+        XCTAssertEqual(
+            GameTagCodec.firstValue(
+                forKey: #"Custom;Key=Part\Tail"#,
+                in: encoded
+            ),
+            #"value;with=delimiters\"#
+        )
     }
 
     // MARK: - PGN comment sanitization
