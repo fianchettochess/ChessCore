@@ -16,6 +16,7 @@ ChessCore's PGN support is divided into several cooperating types:
 - ``PGNDiagnostic`` — structured input issues that lenient parsing cannot
   safely hide.
 - ``GameTagCodec`` — an escape-safe `key=value;…` codec for the tag set.
+- ``GameTreeSnapshot`` — a versioned, lossless representation of a live tree.
 
 ## Parse a PGN string
 
@@ -132,6 +133,32 @@ to its flat `moves` list) — including `{}` comments and `$n` NAGs:
 ```swift
 let movetext = PGNExporter.tokenText(from: game)
 ```
+
+## Preserve a live tree losslessly
+
+PGN is the interchange and presentation format. It is not a lossless object
+graph for an editing session: comments share one text namespace with embedded
+metadata, and deeply hostile variation trees may be bounded during export.
+Use ``GameTreeSnapshot`` when a crash-recovery journal or another storage layer
+must preserve the authored tree, cursor, node metadata, and ordered tags:
+
+```swift
+let snapshot = try GameTreeSnapshot(capturing: liveGame)
+let bytes = try JSONEncoder().encode(snapshot)
+
+let decoded = try JSONDecoder().decode(GameTreeSnapshot.self, from: bytes)
+let restored = Game()
+try restored.restore(from: decoded)
+
+// The restored core model remains fully interoperable with PGN.
+let pgn = restored.exportPGN()
+```
+
+Snapshot schema 2 stores tags as ordered key/value pairs. The decoder accepts
+schema-1 snapshots whose tags used ``GameTagCodec``, so existing recovery data
+can be read and rewritten without making the legacy string encoding the new
+storage contract. Restore validates the FEN and replays every UCI move through
+the legal move generator before replacing the receiving ``Game``.
 
 ## Round-trip the tag set
 

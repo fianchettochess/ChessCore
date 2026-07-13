@@ -28,7 +28,7 @@ top of it, keeping the core small, portable, and free of presentation concerns.
 |---|---|
 | Board model | `Position`, `Move`, `Square`, `Piece`, `PieceColor`, `PieceType`, `CastlingRights`, `GameState`, `MoveAnnotation`, `MoveQuality` |
 | Move generation | `MoveGenerator` — legal and pseudo-legal moves, make-move, attack detection, SAN, perft |
-| Game tree | `Game`, `MoveNode` |
+| Game tree | `Game`, `MoveNode`, `GameTreeSnapshot` |
 | FEN | `Position(fen:)`, `Position.fen`, `positionKey`, `stockfishSafeFEN` |
 | Notation and PGN | `UCIParser` (SAN/UCI), `PGNParser`, `PGNExporter`, `PGNGame`, `GameTagCodec` |
 | Engine interface | `ChessEngine`, `EngineAnalysis`, `UCIOutputParser`, `UCIInfo`, `EngineError` |

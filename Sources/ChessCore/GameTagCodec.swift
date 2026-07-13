@@ -1,20 +1,12 @@
 import Foundation
 
-/// Single-source-of-truth codec for the `tagsJSON` field on
-/// `StoredGame`. The format is semicolon-separated `key=value`
-/// pairs with backslash escapes — chosen so the encoded string can
-/// itself be a SwiftData property without needing a separate
-/// `Data` blob, while still round-tripping the full PGN tag set
-/// (where keys and values can contain any printable character).
+/// An escape-safe, compact string codec for an ordered PGN tag set.
 ///
-/// Two call sites in the app used to maintain their own copy of
-/// the decoder (`StoredGame.decodeTags` returning an OrderedTags,
-/// `GameStatsView.parseTags` returning a plain dictionary). The
-/// 2026-06-09 audit (V1-REVIEW §5) flagged the duplication as a
-/// silent-correctness hazard — if the escaping rules ever needed
-/// to change, only one site would get updated and stats would
-/// quietly misparse every tag. Centralised here so both surfaces
-/// share the same character-handling.
+/// The format is semicolon-separated `key=value` pairs with backslash escapes.
+/// It is useful when an integration needs the complete tag set in one string;
+/// structured storage should generally preserve tags as ordered key/value pairs
+/// instead. Keeping this codec in ChessCore gives every consumer one set of
+/// escaping rules without coupling the core model to a persistence framework.
 public nonisolated enum GameTagCodec {
 
     /// Encode an ordered PGN tag set. Keys and values are escaped for `\`,
@@ -46,10 +38,8 @@ public nonisolated enum GameTagCodec {
         return pairs.joined(separator: ";")
     }
 
-    /// Decode preserving original key order. Used by `StoredGame`
-    /// when reconstructing a `PGNGame` for export — PGN tag order
-    /// is part of the canonical seven-tag-roster layout and round-
-    /// trips matter for tooling parity.
+    /// Decode preserving original key order. PGN tag order matters for the
+    /// canonical seven-tag roster and for faithful re-export.
     public static func decodeOrdered(_ encoded: String) -> PGNGame.OrderedTags {
         var tags = PGNGame.OrderedTags()
         for (key, value) in walkPairs(encoded) {
@@ -58,11 +48,8 @@ public nonisolated enum GameTagCodec {
         return tags
     }
 
-    /// Decode into an unordered dictionary. Used by analytics
-    /// surfaces (GameStatsView speed/Elo classification) that only
-    /// care about lookups, not order. Matches the historical
-    /// `GameStatsView.parseTags` return shape so call sites can
-    /// switch over without touching downstream code.
+    /// Decode into an unordered dictionary for consumers that only need lookup
+    /// semantics and do not need to re-export the original tag order.
     public static func decode(_ encoded: String) -> [String: String] {
         var tags: [String: String] = [:]
         for (key, value) in walkPairs(encoded) {
@@ -71,14 +58,8 @@ public nonisolated enum GameTagCodec {
         return tags
     }
 
-    /// Targeted single-key lookup: the value of the first pair whose
-    /// key equals `key`, or `nil` when absent. Exists so
-    /// `StoredGame`'s cached-Elo fast path reads through the same
-    /// escape walk as the full decoders instead of maintaining a
-    /// third hand-rolled copy of the encoding — the drift hazard
-    /// where a future escaping change silently mis-parses and
-    /// durably persists wrong Elos via the CloudKit-synced cache
-    /// fields. (V1-REVIEW follow-up 2026-06-10 §1 758d33c.)
+    /// Targeted single-key lookup through the same escape walk as the full
+    /// decoders, avoiding a second parser whose behavior could drift.
     public static func firstValue(forKey key: String, in encoded: String) -> String? {
         walkPairs(encoded).first(where: { $0.0 == key })?.1
     }
