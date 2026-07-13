@@ -47,8 +47,10 @@ public final class MoveNode: Identifiable {
     /// Centralizes the `plyIndex / 2 + 1` off-by-one math.
     public var moveNumber: Int { plyIndex / 2 + 1 }
 
-    /// Colour of the side that PLAYED this move (ply 0 = White's first).
-    public var moverColor: PieceColor { plyIndex % 2 == 0 ? .white : .black }
+    /// Colour of the side that PLAYED this move. Derived from the position the
+    /// move was made in — NOT ply parity, which misattributes every move of a
+    /// FEN-setup game where Black moves first (ply 0 is then Black's move).
+    public var moverColor: PieceColor { positionBefore.activeColor }
 
     private var _positionAfter: Position?
 
