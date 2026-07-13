@@ -160,6 +160,45 @@ final class GameTests: XCTestCase {
         XCTAssertEqual(clocksAfterWhite.white, 270)
     }
 
+    // MARK: - MoveNode chain deallocation (regression)
+
+    private func makeSyntheticChain(length: Int) -> MoveNode {
+        // Nodes constructed directly (not via PGN parse) so the test stays
+        // fast — the defect is in deallocation, not import.
+        let move = Move(from: Square(file: 6, rank: 0), to: Square(file: 5, rank: 2), piece: .knight)
+        let position = Position.initial()
+        let root = MoveNode(move: move, notation: "Nf3", positionBefore: position, parent: nil, plyIndex: 0)
+        var tail = root
+        for ply in 1..<length {
+            let node = MoveNode(move: move, notation: "Nf3", positionBefore: position, parent: tail, plyIndex: ply)
+            tail.children.append(node)
+            tail = node
+        }
+        return root
+    }
+
+    func testLongMoveNodeChainDeallocatesWithoutStackOverflow() {
+        // Regression: PGN import has no ply cap (a 2,000-ply shuffle PGN is
+        // ~12KB and passes every size limit), and node release recursed
+        // parent→child through deinit — a long chain overflowed the stack
+        // (hard SIGBUS) on release. 200k plies must deallocate cleanly.
+        var root: MoveNode? = makeSyntheticChain(length: 200_000)
+        XCTAssertEqual(root?.plyIndex, 0)
+        root = nil   // must not crash
+        XCTAssertNil(root)
+    }
+
+    func testReleasingChainHeadPreservesExternallyHeldSubtree() {
+        // The iterative teardown must only dismantle nodes it uniquely owns:
+        // a mid-chain node someone else still holds keeps its children.
+        var head: MoveNode? = makeSyntheticChain(length: 3)
+        let mid = head!.children[0]
+        let leaf = mid.children[0]
+        head = nil
+        XCTAssertEqual(mid.children.count, 1)
+        XCTAssertTrue(mid.children.first === leaf, "externally-held subtree must survive head release")
+    }
+
     func testVariationEditing() {
         let g = Game()
         g.apply(uci("e2e4", g))

@@ -80,4 +80,24 @@ public final class MoveNode: Identifiable {
         }
         return path.reversed()
     }
+
+    deinit {
+        // Iterative subtree teardown. `children` is a strong parent→child
+        // chain; releasing a node naively recurses deinit per ply, and PGN
+        // import has NO ply cap (a 2,000-ply shuffle game is ~12KB — the
+        // stack overflows long before any byte limit bites). Detach each
+        // uniquely-owned descendant's children before dropping it so its own
+        // deinit sees an empty array and never recurses. Nodes something
+        // else still holds are left intact — their remaining owner tears
+        // them down the same way later.
+        var pending = children
+        children = []
+        while !pending.isEmpty {
+            var node = pending.removeLast()
+            if isKnownUniquelyReferenced(&node) {
+                pending.append(contentsOf: node.children)
+                node.children = []
+            }
+        }
+    }
 }
