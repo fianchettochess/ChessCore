@@ -517,40 +517,45 @@ public enum PGNParser {
         content.removeLast()  // ]
         content = content.trimmingCharacters(in: .whitespaces)
 
-        guard let quoteStart = content.firstIndex(of: "\""),
-              let quoteEnd = content.lastIndex(of: "\""),
-              quoteStart != quoteEnd
-        else { return nil }
+        // §8.1 string token: the value starts after the first quote and ends
+        // at the first UNESCAPED quote that follows — NOT the last quote on
+        // the line. First/last-quote pairing folded any trailing junk after
+        // the intended close (including junk containing quotes) into the
+        // value. The scan unescapes as it goes: `\\` → `\`, `\"` → `"`; any
+        // other backslash is kept literally (lenient — matches real-world
+        // PGN that never escaped anything). Counterpart of the exporter's
+        // escaping so export → import round-trips preserve values exactly.
+        guard let quoteStart = content.firstIndex(of: "\"") else { return nil }
 
-        let key = content[content.startIndex..<quoteStart].trimmingCharacters(in: .whitespaces)
-        let value = unescapeTagValue(content[content.index(after: quoteStart)..<quoteEnd])
-
-        return (key, value)
-    }
-
-    /// Undo §8.1 string-token escaping: `\\` → `\` and `\"` → `"`. Any other
-    /// backslash is kept literally (lenient — matches real-world PGN that
-    /// never escaped anything). Counterpart of the exporter's escaping so
-    /// export → import round-trips preserve tag values exactly.
-    nonisolated private static func unescapeTagValue(_ raw: Substring) -> String {
-        guard raw.contains("\\") else { return String(raw) }
-        var result = String()
-        result.reserveCapacity(raw.count)
-        var idx = raw.startIndex
-        while idx < raw.endIndex {
-            let ch = raw[idx]
+        var value = String()
+        var idx = content.index(after: quoteStart)
+        var closed = false
+        while idx < content.endIndex {
+            let ch = content[idx]
             if ch == "\\" {
-                let next = raw.index(after: idx)
-                if next < raw.endIndex, raw[next] == "\\" || raw[next] == "\"" {
-                    result.append(raw[next])
-                    idx = raw.index(after: next)
+                let next = content.index(after: idx)
+                if next < content.endIndex, content[next] == "\\" || content[next] == "\"" {
+                    value.append(content[next])
+                    idx = content.index(after: next)
                     continue
                 }
+                value.append(ch)
+                idx = next
+                continue
             }
-            result.append(ch)
-            idx = raw.index(after: idx)
+            if ch == "\"" {
+                closed = true
+                break
+            }
+            value.append(ch)
+            idx = content.index(after: idx)
         }
-        return result
+        // No closing quote → not a well-formed tag pair (same rejection the
+        // old two-quote requirement gave unterminated values).
+        guard closed else { return nil }
+
+        let key = content[content.startIndex..<quoteStart].trimmingCharacters(in: .whitespaces)
+        return (key, value)
     }
 
     nonisolated private static func extractResult(from text: String) -> String? {
