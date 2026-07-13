@@ -147,7 +147,12 @@ public enum PGNParser {
                 }
             } else if trimmed.isEmpty {
                 inTags = false
-            } else if !inTags {
+            } else {
+                // A non-empty, non-tag line ends the tag section even without
+                // the spec's blank separator line — hand-edited / concatenated
+                // PGNs often omit it. Previously such movetext was silently
+                // dropped (tags-only games) and consecutive games merged.
+                inTags = false
                 if moveTextOverflow { continue }
                 let separatorBytes = moveTextLines.isEmpty ? 0 : 1
                 let nextLineBytes = trimmed.utf8.count
