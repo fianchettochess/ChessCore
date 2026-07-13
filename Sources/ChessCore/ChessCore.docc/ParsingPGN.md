@@ -154,11 +154,14 @@ try restored.restore(from: decoded)
 let pgn = restored.exportPGN()
 ```
 
-Snapshot schema 2 stores tags as ordered key/value pairs. The decoder accepts
-schema-1 snapshots whose tags used ``GameTagCodec``, so existing recovery data
-can be read and rewritten without making the legacy string encoding the new
-storage contract. Restore validates the FEN and replays every UCI move through
-the legal move generator before replacing the receiving ``Game``.
+Snapshot schema 2 stores tags as ordered key/value pairs and preserves the
+model's exact insertion order; PGN export still projects the canonical Seven
+Tag Roster first. The decoder accepts canonical schema-1 snapshots whose tags
+used ``GameTagCodec``, so existing recovery data can be read and rewritten
+without making the legacy string encoding the new storage contract. Restore
+validates the FEN and replays every UCI move through the legal move generator
+before replacing the receiving ``Game``. Decode also bounds node and tag-array
+counts before materializing a hostile snapshot.
 
 ## Round-trip the tag set
 
