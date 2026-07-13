@@ -360,9 +360,10 @@ struct BitBoard {
         let from = Square.fromIndex(kingSq)
         var pseudo: [Move] = []
 
-        // Replicate kingMoves castling generation exactly (path empty + no
-        // attacks on king's current square / transit squares / landing square):
-        if kingside {
+        // Replicate kingMoves castling generation exactly (friendly rook on
+        // the corner + path empty + no attacks on king's current square /
+        // transit squares / landing square):
+        if kingside && pieces[us, 2] & bit(homeRank * 8 + 7) != 0 {
             let fSq = homeRank * 8 + 5
             let gSq = homeRank * 8 + 6
             if allOcc & bit(fSq) == 0 && allOcc & bit(gSq) == 0
@@ -373,7 +374,7 @@ struct BitBoard {
                                    piece: .king, isCastling: true))
             }
         }
-        if queenside {
+        if queenside && pieces[us, 2] & bit(homeRank * 8 + 0) != 0 {
             let dSq = homeRank * 8 + 3
             let cSq = homeRank * 8 + 2
             let bSq = homeRank * 8 + 1
@@ -622,7 +623,11 @@ struct BitBoard {
         let kingside = us == 0 ? castling.whiteKingside : castling.blackKingside
         let queenside = us == 0 ? castling.whiteQueenside : castling.blackQueenside
 
-        if kingside {
+        // A friendly ROOK must actually sit on the corner square: rights can
+        // be stale (board-setup FENs, imported [FEN] PGNs), and generating a
+        // rookless castle made isLegal conjure a phantom rook for the check
+        // test and applyMoveUnchecked move whatever occupied the corner.
+        if kingside && pieces[us, 2] & bit(homeRank * 8 + 7) != 0 {
             let fSq = homeRank * 8 + 5
             let gSq = homeRank * 8 + 6
             if allOcc & bit(fSq) == 0 && allOcc & bit(gSq) == 0
@@ -633,7 +638,7 @@ struct BitBoard {
             }
         }
 
-        if queenside {
+        if queenside && pieces[us, 2] & bit(homeRank * 8 + 0) != 0 {
             let dSq = homeRank * 8 + 3
             let cSq = homeRank * 8 + 2
             let bSq = homeRank * 8 + 1

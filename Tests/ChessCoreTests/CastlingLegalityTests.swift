@@ -117,6 +117,67 @@ final class CastlingLegalityTests: XCTestCase {
         assertEquivalence("1r6/8/8/8/8/8/8/R3K2R w KQ - 0 1")
     }
 
+    // MARK: - Stale rights without a rook (regression)
+
+    /// Regression: castling was generated from rights + empty path + attack
+    /// checks alone, never verifying a FRIENDLY ROOK actually sits on the
+    /// corner square. A FEN with stale rights (board-setup sheet, imported
+    /// [FEN] PGN) offered a phantom castle; isLegal then OR'd a phantom rook
+    /// bit for the check test and applyMoveUnchecked moved whatever occupied
+    /// the corner (nothing — or even an enemy piece) onto f1/d1.
+    private func assertNoCastlingGenerated(
+        _ fen: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        guard let pos = Position(fen: fen) else {
+            XCTFail("invalid FEN: \(fen)", file: file, line: line)
+            return
+        }
+        let generated = MoveGenerator.legalMoves(for: pos).filter(\.isCastling)
+        XCTAssertTrue(generated.isEmpty,
+            "castling generated with no corner rook for FEN \(fen): \(generated.map(\.uci))",
+            file: file, line: line)
+        XCTAssertTrue(MoveGenerator.legalCastlingUCIs(for: pos).isEmpty,
+            "legalCastlingUCIs offered castling with no corner rook for FEN \(fen)",
+            file: file, line: line)
+    }
+
+    func testStaleKingsideRightNoRook_white() {
+        assertNoCastlingGenerated("4k3/8/8/8/8/8/8/4K3 w K - 0 1")
+    }
+
+    func testStaleQueensideRightNoRook_white() {
+        assertNoCastlingGenerated("4k3/8/8/8/8/8/8/4K3 w Q - 0 1")
+    }
+
+    func testStaleQueensideRightRookOnWrongCorner_black() {
+        // Black has the queenside right but the only rook is on h8.
+        assertNoCastlingGenerated("4k2r/8/8/8/8/8/8/4K3 b q - 0 1")
+    }
+
+    func testStaleRightEnemyPieceOnCorner_white() {
+        // Black bishop on h1: previously "castling" would move the ENEMY
+        // bishop to f1.
+        assertNoCastlingGenerated("4k3/8/8/8/8/8/8/4K2b w K - 0 1")
+    }
+
+    func testStaleRightFriendlyNonRookOnCorner_white() {
+        // White knight on h1 is not a rook — no castle.
+        assertNoCastlingGenerated("4k3/8/8/8/8/8/8/4K2N w K - 0 1")
+    }
+
+    func testRookPresentStillCastles_bothWings() {
+        // Guard against over-restriction: real rooks on the corners must
+        // still castle.
+        guard let pos = Position(fen: "r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1") else {
+            return XCTFail("invalid FEN")
+        }
+        let ucis = Set(MoveGenerator.legalMoves(for: pos).filter(\.isCastling).map(\.uci))
+        XCTAssertEqual(ucis, ["e1g1", "e1c1"])
+        XCTAssertEqual(MoveGenerator.legalCastlingUCIs(for: pos), ["e1g1", "e1c1"])
+    }
+
     // MARK: - Randomised playout sweep (fixed seed, ~300 positions)
 
     func testRandomPlayoutEquivalence() {
