@@ -17,10 +17,10 @@ import Foundation
 /// share the same character-handling.
 public nonisolated enum GameTagCodec {
 
-    /// Encode an ordered PGN tag set. Keys are escaped for `\` and
-    /// `=`; values are escaped for `\`, `=`, and `;` so the escape
+    /// Encode an ordered PGN tag set. Keys and values are escaped for `\`,
+    /// `=`, and `;` so the escape
     /// character, the separator, and the key/value delimiter all
-    /// survive a round-trip even when they appear inside a value.
+    /// survive a round-trip even when they appear inside a key or value.
     ///
     /// The backslash must be escaped FIRST: the decoder's escape
     /// walk treats every `\` as "take the next character literally",
@@ -36,6 +36,7 @@ public nonisolated enum GameTagCodec {
             let escapedKey = key
                 .replacingOccurrences(of: "\\", with: "\\\\")
                 .replacingOccurrences(of: "=", with: "\\=")
+                .replacingOccurrences(of: ";", with: "\\;")
             let escapedValue = value
                 .replacingOccurrences(of: "\\", with: "\\\\")
                 .replacingOccurrences(of: "=", with: "\\=")
