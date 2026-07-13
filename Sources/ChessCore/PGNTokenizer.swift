@@ -350,7 +350,16 @@ public enum PGNParser {
         from pgnGame: PGNGame,
         pliesLimit: Int = Int.max
     ) -> ParsedMainLine {
-        let startPosition = Position.initial()
+        // Honour SetUp/FEN like `loadGame` does: FEN-setup games must be
+        // parsed from their real starting board, or every SAN desyncs and is
+        // silently dropped. A syntactically invalid FEN falls back to the
+        // initial position (this API has no failure channel).
+        let startPosition: Position
+        if let fen = pgnGame.tags["FEN"], !fen.isEmpty, let fenPosition = Position(fen: fen) {
+            startPosition = fenPosition
+        } else {
+            startPosition = Position.initial()
+        }
         var position = startPosition
         var moves: [MainLineMoveSnapshot] = []
 
