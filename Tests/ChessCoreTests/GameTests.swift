@@ -97,6 +97,35 @@ final class GameTests: XCTestCase {
         XCTAssertEqual(game.gameState, .repetition)
     }
 
+    func testThreefoldNotDeclaredAfterTwoOccurrencesFromFENWithNonzeroHalfmoveClock() {
+        // Regression: isThreefoldRepetition walked node.positionBefore up the
+        // tree (the root node's positionBefore IS startPosition), then the
+        // post-loop `startPosition.repetitionKey == key` check counted the
+        // start position a SECOND time whenever steps < limit — reachable for
+        // any loadFEN start with halfmoveClock > 0 (endgame-trainer FENs).
+        // One shuffle-return to the start placement must NOT be a draw.
+        let game = Game()
+        XCTAssertTrue(game.loadFEN("8/8/4k3/8/8/4K3/8/R7 w - - 10 40"))
+
+        // Shuffle out and back once: start placement now occurred TWICE.
+        for uci in ["a1a2", "e6d6", "a2a1", "d6e6"] {
+            let move = UCIParser.uciToMove(uci, in: game.legalMoves)
+            XCTAssertNotNil(move, "expected legal move \(uci)")
+            if let move { game.apply(move) }
+        }
+        XCTAssertNotEqual(game.gameState, .repetition,
+                          "two occurrences of the start position must not be threefold repetition")
+        XCTAssertEqual(game.gameState, .playing)
+
+        // A genuine THIRD occurrence must be declared.
+        for uci in ["a1a2", "e6d6", "a2a1", "d6e6"] {
+            let move = UCIParser.uciToMove(uci, in: game.legalMoves)
+            XCTAssertNotNil(move, "expected legal move \(uci)")
+            if let move { game.apply(move) }
+        }
+        XCTAssertEqual(game.gameState, .repetition)
+    }
+
     func testVariationEditing() {
         let g = Game()
         g.apply(uci("e2e4", g))
