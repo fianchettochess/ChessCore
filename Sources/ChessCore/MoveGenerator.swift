@@ -61,6 +61,24 @@ public nonisolated enum MoveGenerator {
     public static func applyMoveUnchecked(_ position: inout Position, _ move: Move) {
         guard let piece = position[move.from] else { return }
 
+        // Defensive (C9): a castling move is only applied when OUR rook
+        // actually sits on the corner it implies. Generation already
+        // guarantees this, but a hand-constructed / corrupted Move can reach
+        // here directly — previously the castle branch below moved WHATEVER
+        // occupied the corner (an enemy piece, a knight, or nothing) onto
+        // f/d. Reject the move whole, before any mutation, matching the
+        // silent-no-op convention of the missing-mover guard above.
+        if move.isCastling {
+            let rookFile: Int
+            switch move.to.file {
+            case 6: rookFile = 7
+            case 2: rookFile = 0
+            default: return
+            }
+            guard let corner = position[Square(file: rookFile, rank: move.to.rank)],
+                  corner.type == .rook, corner.color == piece.color else { return }
+        }
+
         position[move.to] = piece
         position[move.from] = nil
 
@@ -448,21 +466,26 @@ struct BitBoard {
         // Move the rook for castling so its new square is considered.
         if move.isCastling {
             let rank = toI / 8
+            let rookFrom: Int
+            let rookTo: Int
             if toI % 8 == 6 { // kingside: h-rook -> f
-                let rookFrom = rank * 8 + 7
-                let rookTo = rank * 8 + 5
-                pieces[us, 2] &= ~bit(rookFrom)
-                pieces[us, 2] |= bit(rookTo)
-                occAll &= ~bit(rookFrom)
-                occAll |= bit(rookTo)
+                rookFrom = rank * 8 + 7
+                rookTo = rank * 8 + 5
             } else if toI % 8 == 2 { // queenside: a-rook -> d
-                let rookFrom = rank * 8 + 0
-                let rookTo = rank * 8 + 3
-                pieces[us, 2] &= ~bit(rookFrom)
-                pieces[us, 2] |= bit(rookTo)
-                occAll &= ~bit(rookFrom)
-                occAll |= bit(rookTo)
+                rookFrom = rank * 8 + 0
+                rookTo = rank * 8 + 3
+            } else {
+                return false // malformed castle destination
             }
+            // Defensive (C9): fail legality outright when OUR rook is not on
+            // the corner. Previously the |= below OR'd a PHANTOM rook bit
+            // into the check test for hand-constructed castles that bypassed
+            // generation (which does verify the rook).
+            guard pieces[us, 2] & bit(rookFrom) != 0 else { return false }
+            pieces[us, 2] &= ~bit(rookFrom)
+            pieces[us, 2] |= bit(rookTo)
+            occAll &= ~bit(rookFrom)
+            occAll |= bit(rookTo)
         }
 
         let kingSq = lsbIndex(pieces[us, 0])
