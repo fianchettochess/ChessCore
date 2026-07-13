@@ -65,6 +65,11 @@ public nonisolated struct PGNGame: Identifiable, Sendable {
             return roster + rest
         }
 
+        /// Raw insertion order used by lossless model snapshots. PGN export
+        /// intentionally continues to use `orderedKeys`, which projects the
+        /// canonical Seven Tag Roster ahead of supplemental tags.
+        nonisolated var insertionOrderedKeys: [String] { keys }
+
         public nonisolated var isEmpty: Bool { keys.isEmpty }
     }
 }

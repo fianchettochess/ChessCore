@@ -118,8 +118,8 @@ struct GameTreeSnapshotTests {
     @Test func structuredTagsEncodeInOrderAndDecodeLegacySchema() throws {
         let game = Game()
         var tags = PGNGame.OrderedTags()
-        tags["Event"] = "Structured"
         tags["Custom_Key"] = "value;with\\escapes"
+        tags["Event"] = "Structured"
         game.loadedTags = tags
         let move = try #require(UCIParser.uciToMove("e2e4", in: game.position))
         game.apply(move)
@@ -135,12 +135,30 @@ struct GameTreeSnapshotTests {
             object["loadedTags"] as? [[String: Any]]
         )
         #expect(encodedTags.map { $0["key"] as? String }
-            == ["Event", "Custom_Key"])
+            == ["Custom_Key", "Event"])
 
+        let currentRestored = Game()
+        try currentRestored.restore(from: current)
+        #expect(currentRestored.loadedTags == tags,
+                "Schema 2 must preserve the model's insertion order")
+        let exported = currentRestored.exportPGN()
+        let eventRange = try #require(exported.range(of: "[Event "))
+        let customRange = try #require(exported.range(of: "[Custom_Key "))
+        #expect(eventRange.lowerBound < customRange.lowerBound,
+                "PGN export must still project the canonical roster order")
+        let reparsed = try #require(PGNParser.parse(exported).first)
+        #expect(reparsed.tags.orderedKeys == tags.orderedKeys)
+        #expect(reparsed.tags["Custom_Key"] == tags["Custom_Key"])
+        #expect(reparsed.tags["Event"] == tags["Event"])
+        #expect(reparsed.moves == ["e4"])
+
+        var legacyTags = PGNGame.OrderedTags()
+        legacyTags["Event"] = "Legacy"
+        legacyTags["Custom_Key"] = "value;with\\escapes"
         let legacyObject: [String: Any] = [
             "schemaVersion": 1,
             "startFEN": Position.initial().fen,
-            "loadedTags": GameTagCodec.encode(tags),
+            "loadedTags": GameTagCodec.encode(legacyTags),
             "nodes": [],
         ]
         let legacyData = try JSONSerialization.data(
@@ -152,7 +170,7 @@ struct GameTreeSnapshotTests {
         )
         let restored = Game()
         try restored.restore(from: migrated)
-        #expect(restored.loadedTags == tags)
+        #expect(restored.loadedTags == legacyTags)
         let migratedBytes = try JSONEncoder().encode(migrated)
         let migratedObject = try #require(
             JSONSerialization.jsonObject(with: migratedBytes)
@@ -160,14 +178,75 @@ struct GameTreeSnapshotTests {
         )
         #expect(migratedObject["schemaVersion"] as? Int == 1)
         #expect(migratedObject["loadedTags"] as? String
-            == GameTagCodec.encode(tags))
+            == GameTagCodec.encode(legacyTags))
+    }
 
-        let currentRestored = Game()
-        try currentRestored.restore(from: current)
-        let exported = currentRestored.exportPGN()
-        let reparsed = try #require(PGNParser.parse(exported).first)
-        #expect(reparsed.tags == tags)
-        #expect(reparsed.moves == ["e4"])
+    @Test func schemaStrictnessRejectsMalformedOrMismatchedTagWires() throws {
+        func encoded(schemaVersion: Int, loadedTags: Any) throws -> Data {
+            try JSONSerialization.data(withJSONObject: [
+                "schemaVersion": schemaVersion,
+                "startFEN": Position.initial().fen,
+                "loadedTags": loadedTags,
+                "nodes": [],
+            ])
+        }
+
+        let noncanonicalLegacy = try encoded(
+            schemaVersion: 1,
+            loadedTags: "Event=First;Event=Second"
+        )
+        #expect(throws: GameTreeSnapshotError.invalidLegacyTagEncoding) {
+            _ = try JSONDecoder().decode(
+                GameTreeSnapshot.self,
+                from: noncanonicalLegacy
+            )
+        }
+
+        let schemaOneArray = try encoded(
+            schemaVersion: 1,
+            loadedTags: [["key": "Event", "value": "Wrong wire"]]
+        )
+        #expect(throws: (any Error).self) {
+            _ = try JSONDecoder().decode(
+                GameTreeSnapshot.self,
+                from: schemaOneArray
+            )
+        }
+
+        let schemaTwoString = try encoded(
+            schemaVersion: 2,
+            loadedTags: "Event=Wrong wire"
+        )
+        #expect(throws: (any Error).self) {
+            _ = try JSONDecoder().decode(
+                GameTreeSnapshot.self,
+                from: schemaTwoString
+            )
+        }
+
+        let future = try encoded(schemaVersion: 3, loadedTags: [])
+        #expect(throws: GameTreeSnapshotError.unsupportedSchemaVersion(3)) {
+            _ = try JSONDecoder().decode(GameTreeSnapshot.self, from: future)
+        }
+    }
+
+    @Test func structuredTagDecodeStopsAtTheResourceLimit() throws {
+        let tags = Array(
+            repeating: ["key": "K", "value": "V"],
+            count: GameTreeSnapshot.maximumLoadedTagPairs + 1
+        )
+        let bytes = try JSONSerialization.data(withJSONObject: [
+            "schemaVersion": GameTreeSnapshot.currentSchemaVersion,
+            "startFEN": Position.initial().fen,
+            "loadedTags": tags,
+            "nodes": [],
+        ])
+
+        #expect(throws: GameTreeSnapshotError.tagLimitExceeded(
+            maximumTags: GameTreeSnapshot.maximumLoadedTagPairs
+        )) {
+            _ = try JSONDecoder().decode(GameTreeSnapshot.self, from: bytes)
+        }
     }
 
     @Test func rejectsMalformedStructuredTags() {
