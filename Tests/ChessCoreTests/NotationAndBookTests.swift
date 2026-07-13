@@ -140,6 +140,52 @@ final class NotationAndBookTests: XCTestCase {
         XCTAssertEqual(reparsed[0].white, raw)
     }
 
+    func testTagScannerStopsAtFirstUnescapedQuote() {
+        // §8.1: a tag's string token ends at the first UNESCAPED quote.
+        // Trailing junk after the close — even junk containing quotes —
+        // must not fold into the value. A first/last-quote-pairing scanner
+        // gets every one of these wrong.
+        let cases: [(line: String, key: String, value: String)] = [
+            // Quote after the intended close.
+            (#"[White "a" junk "b"]"#, "White", "a"),
+            // Value ENDING in an escaped quote, then junk with quotes.
+            (#"[Event "say \"hi\"" x "y"]"#, "Event", #"say "hi""#),
+            // Value ending in an escaped backslash (the following quote is
+            // a real close, not an escape), then junk with quotes.
+            (#"[Event "trailing\\" x "y"]"#, "Event", #"trailing\"#),
+        ]
+        for c in cases {
+            let games = PGNParser.parse(c.line + "\n\n*\n")
+            XCTAssertEqual(games.count, 1, "case: \(c.line)")
+            XCTAssertEqual(games[0].tags[c.key], c.value, "case: \(c.line)")
+        }
+    }
+
+    func testTagValueExportImportRoundTripsExactly() {
+        // Contract pin: §8.1 escaping on export + escape-aware scan on parse
+        // must round-trip any value EXACTLY — including quote/backslash at
+        // the very end of the value, where naive scanners break.
+        let values = [
+            #"plain"#,
+            #"He said "hi" \ once"#,
+            #"ends with quote""#,
+            #"ends with backslash\"#,
+            #""leading quote"#,
+            #"back\slash "and" quotes"#,
+            #"bracket ] inside"#,
+        ]
+        for raw in values {
+            var tags = PGNGame.OrderedTags()
+            tags["Event"] = "RT"
+            tags["White"] = raw
+            let exported = PGNExporter.export(game: Game(), tags: tags)
+            let reparsed = PGNParser.parse(exported)
+            XCTAssertEqual(reparsed.count, 1, "value: \(raw)")
+            XCTAssertEqual(reparsed[0].white, raw,
+                           "round-trip must be exact for: \(raw)\nexported:\n\(exported)")
+        }
+    }
+
     func testSANUCIRoundTrip() {
         let pos = Position.initial()
         // e4 as SAN -> Move -> UCI
