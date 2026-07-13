@@ -43,9 +43,12 @@ public final class MoveNode: Identifiable {
         self.comment = comment
     }
 
-    /// 1-based move number this node belongs to (plies 0,1 → move 1).
-    /// Centralizes the `plyIndex / 2 + 1` off-by-one math.
-    public var moveNumber: Int { plyIndex / 2 + 1 }
+    /// The FEN full-move number of the position in which this move was played.
+    ///
+    /// Relative `plyIndex` is tree-local and always starts at zero, so deriving
+    /// this value from ply parity resets mid-game FEN imports to move 1. The
+    /// position already carries the authoritative anchored number.
+    public var moveNumber: Int { positionBefore.fullmoveNumber }
 
     /// Colour of the side that PLAYED this move. Derived from the position the
     /// move was made in — NOT ply parity, which misattributes every move of a
