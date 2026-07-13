@@ -13,6 +13,8 @@ ChessCore's PGN support is divided into several cooperating types:
   `Sendable` snapshot, and parse a single SAN move against a position.
 - ``PGNExporter`` — serialize a game's tokens back to movetext.
 - ``PGNToken`` — the token alphabet (move / variation / comment / NAG).
+- ``PGNDiagnostic`` — structured input issues that lenient parsing cannot
+  safely hide.
 - ``GameTagCodec`` — an escape-safe `key=value;…` codec for the tag set.
 
 ## Parse a PGN string
@@ -42,6 +44,10 @@ print(game.moveCount)   // full-move count
 print(game.moves)       // ["e4", "e5", "Nf3", "Nc6", "Bb5", ...]
 ```
 
+Check `game.diagnostics` before importing. For example, a tag roster with no
+movetext is returned for inspection with `.tagsOnlyRecord` rather than being
+indistinguishable from a deliberately empty game.
+
 A ``PGNGame`` carries its tags in insertion order via ``PGNGame/OrderedTags``,
 which keeps the seven-tag roster first:
 
@@ -59,6 +65,11 @@ To follow the game move by move with full positions, replay it into a
 
 ```swift
 let line: ParsedMainLine = PGNParser.parseMainLineSnapshot(from: game)
+
+guard line.diagnostics.isEmpty else {
+    // Invalid FEN or SAN fails closed: no partial/desynchronised moves escape.
+    return
+}
 
 for snap in line.moves {
     print(snap.notation, snap.positionBefore.fen, "->", snap.positionAfter.fen)
@@ -82,6 +93,21 @@ parse can run on a detached task and the result returned to the UI:
 let snapshot = await Task.detached(priority: .userInitiated) {
     PGNParser.mainLineSnapshot(fromMoveText: rawMoveText)
 }.value
+```
+
+## Materialize a live move tree
+
+``PGNParser/loadGame(from:)`` builds a live ``Game`` and applies the default
+whole-tree node budget, including variations. Code that needs a specific budget
+and an explicit failure reason can use the throwing overload:
+
+```swift
+do {
+    let game = try PGNParser.loadGame(from: parsedGame, maximumTreeNodes: 10_000)
+    // Use game.
+} catch PGNDiagnostic.moveTreeNodeLimitExceeded(let maximumNodes) {
+    print("PGN tree exceeds the \(maximumNodes)-node budget")
+}
 ```
 
 ## Parse a single move
