@@ -9,6 +9,11 @@ import Foundation
 
 extension PGNParser {
 
+    /// Maximum number of `MoveNode` objects materialized for one PGN game,
+    /// including variations. This is deliberately far above practical game
+    /// trees while bounding adversarial, compact repetition input.
+    public static let maximumMoveTreeNodes = 65_536
+
     public static func loadGame(from pgn: String) -> Game? {
         let pgnGames = parse(pgn)
         guard let pgnGame = pgnGames.first else { return nil }
@@ -16,31 +21,67 @@ extension PGNParser {
     }
 
     public static func loadGame(from pgnGame: PGNGame) -> Game? {
+        try? loadGame(
+            from: pgnGame,
+            maximumTreeNodes: maximumMoveTreeNodes
+        )
+    }
+
+    /// Materialize one parsed PGN with an explicit whole-tree resource budget.
+    ///
+    /// Unlike the compatibility overload, this surface reports a limit breach
+    /// as ``PGNDiagnostic/moveTreeNodeLimitExceeded(maximumNodes:)``. No partial
+    /// game escapes: the local tree is released as the error unwinds.
+    public static func loadGame(
+        from pgnGame: PGNGame,
+        maximumTreeNodes: Int
+    ) throws -> Game {
+        precondition(maximumTreeNodes > 0)
         let game = Game()
 
         // Share the snapshot parser's FEN interpretation so the two public PGN
         // paths cannot drift on empty, valid, or invalid setup tags.
-        guard let startPosition = startingPosition(for: pgnGame) else { return nil }
+        guard let startPosition = startingPosition(for: pgnGame) else {
+            throw PGNDiagnostic.invalidFEN(pgnGame.tags["FEN"] ?? "")
+        }
         if pgnGame.tags["FEN"]?.isEmpty == false {
-            guard game.loadFEN(startPosition.fen) else { return nil }
+            guard game.loadFEN(startPosition.fen) else {
+                throw PGNDiagnostic.invalidFEN(pgnGame.tags["FEN"] ?? "")
+            }
         }
 
         if pgnGame.moveTokens.isEmpty {
+            var materializedNodeCount = 0
             for san in pgnGame.moves {
                 guard let move = parseMove(san, in: game.position) else {
                     return game
                 }
+                guard materializedNodeCount < maximumTreeNodes else {
+                    throw PGNDiagnostic.moveTreeNodeLimitExceeded(
+                        maximumNodes: maximumTreeNodes
+                    )
+                }
                 game.applyMoveFromPGN(move)
+                materializedNodeCount += 1
             }
         } else {
-            buildTree(game: game, tokens: pgnGame.moveTokens)
+            try buildTree(
+                game: game,
+                tokens: pgnGame.moveTokens,
+                maximumNodes: maximumTreeNodes
+            )
         }
 
         return game
     }
 
-    private static func buildTree(game: Game, tokens: [PGNToken]) {
+    private static func buildTree(
+        game: Game,
+        tokens: [PGNToken],
+        maximumNodes: Int
+    ) throws {
         var nodeStack: [MoveNode?] = [nil]
+        var materializedNodeCount = 0
 
         for token in tokens {
             switch token {
@@ -62,6 +103,11 @@ extension PGNParser {
                     if let annotation { existing.annotation = annotation }
                     nodeStack[nodeStack.count - 1] = existing
                 } else {
+                    guard materializedNodeCount < maximumNodes else {
+                        throw PGNDiagnostic.moveTreeNodeLimitExceeded(
+                            maximumNodes: maximumNodes
+                        )
+                    }
                     let notation = MoveGenerator.algebraicNotation(for: move, in: currentPos)
                     let newNode = MoveNode(move: move, notation: notation, positionBefore: currentPos, parent: parentNode, plyIndex: ply, annotation: annotation)
                     if let parent = parentNode {
@@ -70,6 +116,7 @@ extension PGNParser {
                         game.rootChildren.append(newNode)
                     }
                     nodeStack[nodeStack.count - 1] = newNode
+                    materializedNodeCount += 1
                 }
 
             case .nag(let number):

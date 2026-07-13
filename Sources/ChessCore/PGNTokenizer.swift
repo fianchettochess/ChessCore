@@ -12,6 +12,8 @@ public nonisolated enum PGNDiagnostic: Error, Equatable, Sendable {
     case invalidFEN(String)
     /// A main-line SAN token could not be applied at the expected ply.
     case unparseableMainlineMove(san: String, plyIndex: Int)
+    /// Materializing the complete move tree would exceed its resource budget.
+    case moveTreeNodeLimitExceeded(maximumNodes: Int)
 }
 
 // MARK: - PGN Game model
