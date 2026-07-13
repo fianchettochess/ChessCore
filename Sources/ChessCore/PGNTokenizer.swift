@@ -1,10 +1,9 @@
 import Foundation
 
-/// Structured, non-fatal issues discovered while parsing PGN input.
+/// Structured issues discovered while parsing or materializing PGN input.
 ///
-/// Parsing remains lenient for interoperability, but callers can distinguish a
-/// deliberately empty game from input that could otherwise look successfully
-/// parsed after content was missing or rejected.
+/// Lenient warnings can travel on parsed values; failures that cannot safely
+/// produce a value also conform to `Error` for throwing APIs.
 public nonisolated enum PGNDiagnostic: Error, Equatable, Sendable {
     /// A tag roster was present but the record contained no movetext at all.
     case tagsOnlyRecord
