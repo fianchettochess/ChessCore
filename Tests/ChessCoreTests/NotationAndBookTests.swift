@@ -181,6 +181,35 @@ final class NotationAndBookTests: XCTestCase {
                        "snapshot must start from the [FEN] tag position")
         XCTAssertEqual(parsed.moves.map(\.notation), ["Ra6+", "Kf5", "Kf3"],
                        "every SAN must parse relative to the FEN start")
+        XCTAssertTrue(parsed.diagnostics.isEmpty)
+    }
+
+    func testParseMainLineSnapshotRejectsInvalidFENWithoutFallback() throws {
+        let pgn = """
+        [SetUp "1"]
+        [FEN "not a fen"]
+
+        1. e4 e5 *
+        """
+        let game = try XCTUnwrap(PGNParser.parse(pgn).first)
+        let parsed = PGNParser.parseMainLineSnapshot(from: game)
+
+        XCTAssertTrue(parsed.moves.isEmpty,
+                      "an invalid setup must not be replayed from the initial board")
+        XCTAssertEqual(parsed.diagnostics, [.invalidFEN("not a fen")])
+    }
+
+    func testParseMainLineSnapshotFailsClosedOnInvalidMainlineSAN() {
+        let parsed = PGNParser.mainLineSnapshot(
+            fromMoveText: "1. e4 Bogus 2. e5 Nf3 *"
+        )
+
+        XCTAssertTrue(parsed.moves.isEmpty,
+                      "a failed SAN must discard the partial/desynchronised snapshot")
+        XCTAssertEqual(
+            parsed.diagnostics,
+            [.unparseableMainlineMove(san: "Bogus", plyIndex: 1)]
+        )
     }
 
     func testExportEscapesQuoteAndBackslashInTagValues() {

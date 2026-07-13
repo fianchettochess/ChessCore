@@ -8,6 +8,10 @@ import Foundation
 public nonisolated enum PGNDiagnostic: Error, Equatable, Sendable {
     /// A tag roster was present but the record contained no movetext at all.
     case tagsOnlyRecord
+    /// A supplied FEN tag could not be parsed, so no moves were interpreted.
+    case invalidFEN(String)
+    /// A main-line SAN token could not be applied at the expected ply.
+    case unparseableMainlineMove(san: String, plyIndex: Int)
 }
 
 // MARK: - PGN Game model
@@ -96,6 +100,7 @@ public nonisolated struct MainLineMoveSnapshot: Sendable {
 public nonisolated struct ParsedMainLine: Sendable {
     public let startPosition: Position
     public let moves: [MainLineMoveSnapshot]
+    public let diagnostics: [PGNDiagnostic]
 }
 
 // MARK: - PGN Parser (tokenize / parse / snapshot)
@@ -348,6 +353,15 @@ public enum PGNParser {
     /// parse cost for long games). Defaults to `Int.max` so existing
     /// callers see identical behaviour. (bounded-perf 2026-07-01)
     /// (dedup 2026-06-17)
+    /// Resolve the starting position shared by snapshot and live-tree PGN
+    /// materialization. `nil` means a non-empty FEN tag was invalid.
+    nonisolated static func startingPosition(for pgnGame: PGNGame) -> Position? {
+        guard let fen = pgnGame.tags["FEN"], !fen.isEmpty else {
+            return Position.initial()
+        }
+        return Position(fen: fen)
+    }
+
     public nonisolated static func mainLineSnapshot(
         fromMoveText moveText: String,
         pliesLimit: Int = Int.max
@@ -361,15 +375,15 @@ public enum PGNParser {
         from pgnGame: PGNGame,
         pliesLimit: Int = Int.max
     ) -> ParsedMainLine {
-        // Honour SetUp/FEN like `loadGame` does: FEN-setup games must be
-        // parsed from their real starting board, or every SAN desyncs and is
-        // silently dropped. A syntactically invalid FEN falls back to the
-        // initial position (this API has no failure channel).
-        let startPosition: Position
-        if let fen = pgnGame.tags["FEN"], !fen.isEmpty, let fenPosition = Position(fen: fen) {
-            startPosition = fenPosition
-        } else {
-            startPosition = Position.initial()
+        // Invalid setup input fails closed. Falling back to the initial board
+        // would make unrelated SAN appear valid and manufacture a line.
+        guard let startPosition = startingPosition(for: pgnGame) else {
+            let fen = pgnGame.tags["FEN"] ?? ""
+            return ParsedMainLine(
+                startPosition: .initial(),
+                moves: [],
+                diagnostics: pgnGame.diagnostics + [.invalidFEN(fen)]
+            )
         }
         var position = startPosition
         var moves: [MainLineMoveSnapshot] = []
@@ -391,7 +405,21 @@ public enum PGNParser {
             case .move(let san):
                 guard variationDepth == 0 else { continue }
                 let (cleanedSan, annotation) = MoveAnnotation.extract(from: san)
-                guard let move = parseMove(cleanedSan, in: position) else { continue }
+                guard let move = parseMove(cleanedSan, in: position) else {
+                    // Never skip a failed main-line token and continue from the
+                    // wrong board. Discard the partial snapshot and report the
+                    // exact point at which interpretation stopped.
+                    return ParsedMainLine(
+                        startPosition: startPosition,
+                        moves: [],
+                        diagnostics: pgnGame.diagnostics + [
+                            .unparseableMainlineMove(
+                                san: cleanedSan,
+                                plyIndex: moves.count
+                            )
+                        ]
+                    )
+                }
                 let positionBefore = position
                 let notation = MoveGenerator.algebraicNotation(for: move, in: positionBefore)
                 MoveGenerator.applyMoveUnchecked(&position, move)
@@ -455,7 +483,11 @@ public enum PGNParser {
             }
         }
 
-        return ParsedMainLine(startPosition: startPosition, moves: moves)
+        return ParsedMainLine(
+            startPosition: startPosition,
+            moves: moves,
+            diagnostics: pgnGame.diagnostics
+        )
     }
 
     public nonisolated static func parseEngineComment(_ text: String) -> (eval: String?, bestMove: String?, comment: String?, clockSeconds: TimeInterval?) {
