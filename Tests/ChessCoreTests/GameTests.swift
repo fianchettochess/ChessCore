@@ -133,9 +133,9 @@ final class GameTests: XCTestCase {
         // by moverColor, so the first clock annotation must land on BLACK.
         let pgn = """
         [SetUp "1"]
-        [FEN "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"]
+        [FEN "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 34"]
 
-        1... e5 {[%clk 0:05:00]} 2. Nf3 {[%clk 0:04:30]} *
+        34... e5 {[%clk 0:05:00]} 35. Nf3 {[%clk 0:04:30]} *
         """
         let game = Game()
         XCTAssertTrue(game.loadPGN(pgn))
@@ -145,6 +145,9 @@ final class GameTests: XCTestCase {
         XCTAssertEqual(mainLine[0].moverColor, .black,
                        "ply 0 of a black-to-move FEN game is played by BLACK")
         XCTAssertEqual(mainLine[1].moverColor, .white)
+        XCTAssertEqual(mainLine[0].moveNumber, 34,
+                       "a tree-local ply 0 must retain its FEN full-move anchor")
+        XCTAssertEqual(mainLine[1].moveNumber, 35)
 
         // After Black's first move, only Black has a clock annotation.
         game.navigateToNode(mainLine[0])
