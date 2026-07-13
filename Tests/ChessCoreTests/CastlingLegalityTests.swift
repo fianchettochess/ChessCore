@@ -178,6 +178,81 @@ final class CastlingLegalityTests: XCTestCase {
         XCTAssertEqual(MoveGenerator.legalCastlingUCIs(for: pos), ["e1g1", "e1c1"])
     }
 
+    // MARK: - Defense in depth: hand-constructed castling Moves (bypass generation)
+
+    /// C9: generation now requires the corner rook, but a castling `Move` can
+    /// be constructed by hand (or arrive from a corrupted/foreign source) and
+    /// go straight to `isLegal` / `applyMoveUnchecked`. Legality must fail
+    /// defensively — never OR a phantom rook bit into the check test — and
+    /// `applyMoveUnchecked` must reject the move whole rather than create or
+    /// move a phantom piece.
+    private func handMadeCastle(_ from: String, _ to: String) -> Move {
+        Move(from: Square(algebraic: from)!, to: Square(algebraic: to)!,
+             piece: .king, isCastling: true)
+    }
+
+    private func assertPhantomCastleRejected(
+        _ fen: String,
+        _ move: Move,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        guard let pos = Position(fen: fen) else {
+            XCTFail("invalid FEN: \(fen)", file: file, line: line)
+            return
+        }
+        XCTAssertFalse(BitBoard(pos).isLegal(move),
+            "isLegal must fail defensively without a friendly corner rook: \(fen)",
+            file: file, line: line)
+        var applied = pos
+        MoveGenerator.applyMoveUnchecked(&applied, move)
+        XCTAssertEqual(applied.fen, pos.fen,
+            "applyMoveUnchecked must reject a rookless castle whole (no mutation): \(fen)",
+            file: file, line: line)
+    }
+
+    func testHandMadeCastleMissingCornerRook() {
+        assertPhantomCastleRejected("4k3/8/8/8/8/8/8/4K3 w K - 0 1",
+                                    handMadeCastle("e1", "g1"))
+        assertPhantomCastleRejected("4k3/8/8/8/8/8/8/4K3 w Q - 0 1",
+                                    handMadeCastle("e1", "c1"))
+        assertPhantomCastleRejected("4k3/8/8/8/8/8/8/4K3 b kq - 0 1",
+                                    handMadeCastle("e8", "g8"))
+    }
+
+    func testHandMadeCastleEnemyPieceOnCorner() {
+        // Black bishop on h1: applyMoveUnchecked used to move the ENEMY
+        // bishop onto f1.
+        assertPhantomCastleRejected("4k3/8/8/8/8/8/8/4K2b w K - 0 1",
+                                    handMadeCastle("e1", "g1"))
+        // White rook on a8 is the WRONG COLOR for black's queenside castle.
+        assertPhantomCastleRejected("R3k3/8/8/8/8/8/8/4K3 b q - 0 1",
+                                    handMadeCastle("e8", "c8"))
+    }
+
+    func testHandMadeCastleFriendlyNonRookOnCorner() {
+        assertPhantomCastleRejected("4k3/8/8/8/8/8/8/4K2N w K - 0 1",
+                                    handMadeCastle("e1", "g1"))
+        assertPhantomCastleRejected("n3k3/8/8/8/8/8/8/4K3 b q - 0 1",
+                                    handMadeCastle("e8", "c8"))
+    }
+
+    func testHandMadeCastleWithRealRookStillApplies() {
+        // Over-restriction guard: the same hand-made move with a genuine
+        // friendly rook on the corner must stay legal and apply fully.
+        guard let pos = Position(fen: "4k3/8/8/8/8/8/8/4K2R w K - 0 1") else {
+            return XCTFail("invalid FEN")
+        }
+        let move = handMadeCastle("e1", "g1")
+        XCTAssertTrue(BitBoard(pos).isLegal(move))
+        var applied = pos
+        MoveGenerator.applyMoveUnchecked(&applied, move)
+        XCTAssertEqual(applied[Square(algebraic: "g1")!]?.type, .king)
+        XCTAssertEqual(applied[Square(algebraic: "f1")!]?.type, .rook)
+        XCTAssertNil(applied[Square(algebraic: "h1")!])
+        XCTAssertNil(applied[Square(algebraic: "e1")!])
+    }
+
     // MARK: - Randomised playout sweep (fixed seed, ~300 positions)
 
     func testRandomPlayoutEquivalence() {
