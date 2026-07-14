@@ -78,6 +78,29 @@ final class ChessModelTests: XCTestCase {
         XCTAssertEqual(PieceColor(persistenceKey: "white"), .white)
         XCTAssertNil(PieceColor(persistenceKey: "grey"))
         XCTAssertEqual(PieceColor.ofUser(white: "Magnus", black: "Hikaru", username: "hikaru"), .black)
+        XCTAssertEqual(
+            PieceColor.ofUser(
+                white: "  MÁGNUS  ",
+                black: "Hikaru",
+                username: "ma\u{301}gnus"
+            ),
+            .white
+        )
+        XCTAssertNil(PieceColor.ofUser(
+            white: "Same Account",
+            black: " same account ",
+            username: "SAME ACCOUNT"
+        ))
+        XCTAssertNil(PieceColor.ofUser(
+            white: "Magnus",
+            black: "Hikaru",
+            username: "  "
+        ))
+        XCTAssertNil(PieceColor.ofUser(
+            white: "Magnus",
+            black: "Hikaru",
+            username: "Other"
+        ))
     }
 
     func testMoveAnnotationParsing() {

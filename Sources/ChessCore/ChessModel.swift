@@ -40,14 +40,31 @@ public nonisolated enum PieceColor: Equatable, Hashable, Codable, Sendable {
         }
     }
 
-    /// Which side `username` played, by case-insensitive match against the
-    /// two player names — nil if neither matches. Replaces the
-    /// `resolveColor`/`userColor` copies in the stats/extractor code.
-    public static func ofUser(white: String, black: String, username: String) -> PieceColor? {
-        let user = username.lowercased()
-        if white.lowercased() == user { return .white }
-        if black.lowercased() == user { return .black }
-        return nil
+    /// Which side `username` played, by normalized case-insensitive match
+    /// against exactly one player name. Empty, absent, and ambiguous matches
+    /// return nil; assigning White merely because both names happen to match
+    /// would turn uncertain account metadata into durable derived results.
+    public static func ofUser(
+        white: String,
+        black: String,
+        username: String
+    ) -> PieceColor? {
+        let user = normalizedPlayerIdentity(username)
+        guard !user.isEmpty else { return nil }
+        let matchesWhite = normalizedPlayerIdentity(white) == user
+        let matchesBlack = normalizedPlayerIdentity(black) == user
+        switch (matchesWhite, matchesBlack) {
+        case (true, false): return .white
+        case (false, true): return .black
+        case (false, false), (true, true): return nil
+        }
+    }
+
+    private static func normalizedPlayerIdentity(_ value: String) -> String {
+        value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .precomposedStringWithCanonicalMapping
+            .lowercased()
     }
 }
 
