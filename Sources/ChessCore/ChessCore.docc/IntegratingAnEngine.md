@@ -76,7 +76,7 @@ prediction failure, and no-legal-moves.
 ## Wiring a real engine
 
 A typical ``ChessEngine`` adapter drives
-[SwiftStockfish](https://github.com/jaredbrewer/SwiftStockfish): it sends
+[SwiftStockfish](https://github.com/fianchettochess/SwiftStockfish): it sends
 ``Position/stockfishSafeFEN``, collects `info` lines via
 ``UCIOutputParser/parseInfo(_:)``, and builds each
 ``EngineAnalysis/ScoredMove`` with ``UCIParser`` and

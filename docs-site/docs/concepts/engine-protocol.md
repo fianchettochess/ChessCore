@@ -187,7 +187,7 @@ for await line in engine.output {
 
 ## Wiring a real engine
 
-A typical `ChessEngine` adapter drives [SwiftStockfish](https://github.com/jaredbrewer/SwiftStockfish),
+A typical `ChessEngine` adapter drives [SwiftStockfish](https://github.com/fianchettochess/SwiftStockfish),
 sends `position.stockfishSafeFEN`, collects `info` lines via
 `UCIOutputParser.parseInfo`, and constructs `ScoredMove` values with
 `UCIParser.uciToMove` and `MoveGenerator.algebraicNotation`. See the

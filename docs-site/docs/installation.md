@@ -24,7 +24,7 @@ Swift stdlib + Foundation and builds down to iOS 11 / macOS 10.10.
 ```swift
 // Package.swift
 dependencies: [
-    .package(url: "https://github.com/jaredbrewer/ChessCore", from: "0.1.0"),
+    .package(url: "https://github.com/fianchettochess/ChessCore", from: "0.1.0"),
 ],
 targets: [
     .target(

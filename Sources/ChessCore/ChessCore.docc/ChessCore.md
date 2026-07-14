@@ -19,7 +19,7 @@ tree), ``PGNParser`` / ``PGNExporter``, and ``UCIOutputParser`` /
 
 The ``ChessEngine`` protocol and ``EngineAnalysis`` types describe an engine
 abstraction without binding to any concrete engine. Connect
-[SwiftStockfish](https://github.com/jaredbrewer/SwiftStockfish) or a neural engine
+[SwiftStockfish](https://github.com/fianchettochess/SwiftStockfish) or a neural engine
 behind it.
 
 ### Example
