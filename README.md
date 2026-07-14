@@ -35,7 +35,7 @@ top of it, keeping the core small, portable, and free of presentation concerns.
 
 The `ChessEngine` protocol and `EngineAnalysis` types define an engine interface
 independent of any concrete engine. Conforming types may wrap
-[SwiftStockfish](https://github.com/jaredbrewer/SwiftStockfish) or a neural
+[SwiftStockfish](https://github.com/fianchettochess/SwiftStockfish) or a neural
 network engine.
 
 ## Installation
@@ -43,7 +43,7 @@ network engine.
 Add the package with Swift Package Manager:
 
 ```swift
-.package(url: "https://github.com/jaredbrewer/ChessCore.git", from: "0.1.0")
+.package(url: "https://github.com/fianchettochess/ChessCore.git", from: "0.1.0")
 ```
 
 Then add `"ChessCore"` to the dependencies of any target that uses it.
