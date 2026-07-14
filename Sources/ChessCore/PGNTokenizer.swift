@@ -318,11 +318,10 @@ public enum PGNParser {
 
         let candidates = MoveGenerator.findLegalMoves(for: position, piece: pieceType, to: target)
             .filter { move in
-                if let promo = promotion {
-                    guard move.promotion == promo else { return false }
-                } else {
-                    guard move.promotion == nil || move.promotion == .queen else { return false }
-                }
+                // A promotion piece is part of SAN, not an optional hint. An
+                // omitted suffix must not silently select the queen from the
+                // otherwise-identical legal promotion moves.
+                guard move.promotion == promotion else { return false }
 
                 if let df = disambigFile {
                     guard move.from.file == df else { return false }
@@ -338,11 +337,9 @@ public enum PGNParser {
             return candidates[0]
         }
 
-        if let promo = promotion {
-            return candidates.first { $0.promotion == promo }
-        }
-
-        return candidates.first
+        // Under-specified SAN is not deterministic. Choosing generator order
+        // here would make a malformed PGN describe a different game.
+        return nil
     }
 
     /// Build a `Sendable` mainline snapshot from a parsed PGN game. Variations

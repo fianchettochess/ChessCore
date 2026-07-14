@@ -115,8 +115,10 @@ do {
 
 To turn one SAN token into a ``Move`` against a position — useful when driving
 a board directly — use ``PGNParser/parseMove(_:in:)``. It handles
-castling (`O-O` / `0-0`), promotion (`=Q`), disambiguation, and captures, and
-defaults an ambiguous promotion to a queen:
+castling (`O-O` / `0-0`), promotion (`=Q`), disambiguation, and captures.
+Parsing fails when the supplied SAN does not identify exactly one legal move;
+in particular, required piece disambiguation and promotion suffixes are never
+inferred from move-generator order:
 
 ```swift
 var position = Position.initial()

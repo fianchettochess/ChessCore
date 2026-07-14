@@ -212,6 +212,62 @@ final class NotationAndBookTests: XCTestCase {
         )
     }
 
+    func testParseMoveRequiresUniqueSANDisambiguation() throws {
+        // All three knights can legally reach d4. The b3 knight needs its
+        // full square because another candidate shares its file and a third
+        // shares its rank.
+        let position = try XCTUnwrap(
+            Position(fen: "7k/8/8/1N6/8/1N3N2/8/7K w - - 0 1")
+        )
+
+        XCTAssertNil(PGNParser.parseMove("Nd4", in: position))
+        XCTAssertNil(PGNParser.parseMove("Nbd4", in: position),
+                     "file-only SAN still matches the b3 and b5 knights")
+        XCTAssertNil(PGNParser.parseMove("N3d4", in: position),
+                     "rank-only SAN still matches the b3 and f3 knights")
+        XCTAssertEqual(
+            PGNParser.parseMove("Nfd4", in: position)?.from,
+            Square(algebraic: "f3")
+        )
+        XCTAssertEqual(
+            PGNParser.parseMove("N5d4", in: position)?.from,
+            Square(algebraic: "b5")
+        )
+        XCTAssertEqual(
+            PGNParser.parseMove("Nb3d4", in: position)?.from,
+            Square(algebraic: "b3")
+        )
+    }
+
+    func testParseMoveRequiresExplicitPromotionPiece() throws {
+        let position = try XCTUnwrap(
+            Position(fen: "7k/P7/8/8/8/8/8/7K w - - 0 1")
+        )
+
+        XCTAssertNil(PGNParser.parseMove("a8", in: position),
+                     "an omitted promotion piece must not default to queen")
+        XCTAssertEqual(PGNParser.parseMove("a8=Q", in: position)?.promotion, .queen)
+        XCTAssertEqual(PGNParser.parseMove("a8=N", in: position)?.promotion, .knight)
+    }
+
+    func testMainLineSnapshotRejectsAmbiguousSANWithoutPartialLine() throws {
+        let pgn = """
+        [SetUp "1"]
+        [FEN "7k/8/8/1N6/8/1N3N2/8/7K w - - 0 1"]
+
+        1. Kh2 Kg8 2. Nd4 *
+        """
+        let game = try XCTUnwrap(PGNParser.parse(pgn).first)
+        let parsed = PGNParser.parseMainLineSnapshot(from: game)
+
+        XCTAssertTrue(parsed.moves.isEmpty,
+                      "ambiguous SAN must discard the otherwise-valid prefix")
+        XCTAssertEqual(
+            parsed.diagnostics,
+            [.unparseableMainlineMove(san: "Nd4", plyIndex: 2)]
+        )
+    }
+
     func testExportEscapesQuoteAndBackslashInTagValues() {
         // Regression: the exporter emitted tag values verbatim, so a quote or
         // backslash produced out-of-spec PGN (§8.1: '\' and '"' must be
