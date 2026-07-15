@@ -311,7 +311,7 @@ public enum PGNParser {
             remaining = String(remaining.dropFirst())
         }
 
-        remaining = remaining.replacingOccurrences(of: "x", with: "")
+        remaining.removeAll { $0 == "x" }  // Foundation-free (was replacingOccurrences). (C6)
 
         guard remaining.count >= 2 else { return nil }
 

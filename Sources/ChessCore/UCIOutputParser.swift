@@ -154,7 +154,10 @@ public nonisolated enum UCIOutputParser {
     /// Parse a single engine output line. Returns a `UCIInfo` for `info …`
     /// lines; `nil` for anything else (`bestmove`, `readyok`, blanks, …).
     public static func parseInfo(_ line: String) -> UCIInfo? {
-        let tokens = line.split(separator: " ").map(String.init)
+        // Keep tokens as Substrings (they share `line`'s buffer); convert to
+        // String only where stored (`pv`). Drops a per-line intermediate [String]
+        // array on the engine's highest-frequency output. (C3)
+        let tokens = line.split(separator: " ")
         guard tokens.first == "info" else { return nil }
         if line.contains("lowerbound") || line.contains("upperbound") { return nil }
 
@@ -180,7 +183,7 @@ public nonisolated enum UCIOutputParser {
                 }
                 i += 3
             case "pv":
-                if i + 1 < tokens.count { result.pv = Array(tokens[(i + 1)...]) }
+                if i + 1 < tokens.count { result.pv = tokens[(i + 1)...].map(String.init) }
                 i = tokens.count
             default:
                 i += 1
@@ -200,10 +203,10 @@ public nonisolated enum UCIOutputParser {
     /// Extract the move from a `bestmove <uci> [ponder <uci>]` line. Returns
     /// `nil` for any other line, or when the engine reports `bestmove (none)`.
     public static func parseBestMove(_ line: String) -> String? {
-        let tokens = line.split(separator: " ").map(String.init)
+        let tokens = line.split(separator: " ")
         guard tokens.first == "bestmove", tokens.count >= 2 else { return nil }
         let move = tokens[1]
-        return move == "(none)" ? nil : move
+        return move == "(none)" ? nil : String(move)
     }
 
     /// Distil a batch of `UCIInfo` values (e.g. from a MultiPV search) into a

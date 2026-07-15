@@ -350,6 +350,16 @@ extension PGNExporter {
              .replacingOccurrences(of: "\"", with: "\\\"")
     }
 
+    /// PGN `Date` formatter, built ONCE. `DateFormatter()` sets up locale +
+    /// calendar + ICU — expensive to instantiate (worse on swift-corelibs /
+    /// SkipFoundation), and it was rebuilt on every export. Immutable after
+    /// configuration and used only for formatting, so sharing is safe. (C5)
+    nonisolated(unsafe) private static let pgnDateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy.MM.dd"
+        return f
+    }()
+
     private static func defaultTags(for game: Game) -> PGNGame.OrderedTags {
         var tags = PGNGame.OrderedTags()
         // Neutral placeholders for a general-purpose kernel; callers that want
@@ -357,9 +367,7 @@ extension PGNExporter {
         tags["Event"] = "Casual Game"
         tags["Site"] = "?"
 
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy.MM.dd"
-        tags["Date"] = formatter.string(from: Date())
+        tags["Date"] = Self.pgnDateFormatter.string(from: Date())
 
         tags["Round"] = "-"
         tags["White"] = "Player 1"
