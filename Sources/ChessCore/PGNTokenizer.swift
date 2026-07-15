@@ -497,7 +497,14 @@ public enum PGNParser {
         var remaining = text
         var clockSeconds: TimeInterval?
 
-        if let clkRange = remaining.range(of: #"\[%clk\s+(\d+):(\d{2}):(\d{2}(?:\.\d+)?)\]"#, options: .regularExpression) {
+        // Fast-path: the `[%clk ...]` clock tag appears only in imported
+        // broadcast/Lichess PGNs, never in engine eval / `; best` annotations.
+        // `contains` is a cheap necessary condition for the regex to match, so
+        // skipping it avoids compiling + scanning the regular expression on
+        // every move comment during a full-library replay. Behaviour is
+        // identical — when the literal is absent the regex cannot match.
+        if remaining.contains("[%clk"),
+           let clkRange = remaining.range(of: #"\[%clk\s+(\d+):(\d{2}):(\d{2}(?:\.\d+)?)\]"#, options: .regularExpression) {
             let clkString = String(remaining[clkRange])
             remaining.removeSubrange(clkRange)
             remaining = remaining.trimmingCharacters(in: .whitespaces)
