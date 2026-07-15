@@ -41,12 +41,16 @@ func pad(_ s: String, _ n: Int) -> String {
 
 func benchPerft(_ name: String, fen: String, depth: Int, expected: Int) {
     guard let pos = Position(fen: fen) else { print("  \(name): invalid FEN"); return }
-    var nodes = 0
-    let secs = timeSeconds { nodes = perft(pos, depth) }
-    precondition(nodes == expected,
-                 "\(name) perft(\(depth)) = \(nodes), expected \(expected) — MOVE GENERATION BUG")
-    let mnps = round1(Double(expected) / secs / 1_000_000)
-    print("  perft \(pad(name, 9)) d\(depth): \(expected) nodes in \(round3(secs))s  →  \(mnps) Mnps")
+    // Warm up (builds the magic tables + primes caches) AND verifies the node
+    // count. Then report the BEST of several runs — the min time has the least
+    // scheduling/cache noise, which matters for isolating a change, especially
+    // on Linux/Android where the first run is disproportionately cold.
+    precondition(perft(pos, depth) == expected,
+                 "\(name) perft(\(depth)) node count wrong — MOVE GENERATION BUG")
+    var best = Double.greatestFiniteMagnitude
+    for _ in 0..<5 { best = min(best, timeSeconds { _ = perft(pos, depth) }) }
+    let mnps = round1(Double(expected) / best / 1_000_000)
+    print("  perft \(pad(name, 9)) d\(depth): \(expected) nodes  best \(round3(best))s  →  \(mnps) Mnps")
 }
 
 // MARK: - App-relevant paths: PGN parse (import / tactics re-parse) + the
