@@ -93,7 +93,10 @@ extension PGNParser {
                 } else {
                     currentPos = game.startPosition
                 }
-                guard let move = parseMove(cleanedSan, in: currentPos) else { continue }
+                // Generate the legal-move list ONCE and thread it into both the
+                // SAN parse and the canonical-notation derivation. (B2)
+                let legal = MoveGenerator.legalMoves(for: currentPos)
+                guard let move = parseMove(cleanedSan, in: currentPos, legalMoves: legal) else { continue }
 
                 let parentNode = nodeStack.last ?? nil
                 let siblings = parentNode?.children ?? game.rootChildren
@@ -108,7 +111,7 @@ extension PGNParser {
                             maximumNodes: maximumNodes
                         )
                     }
-                    let notation = MoveGenerator.algebraicNotation(for: move, in: currentPos)
+                    let notation = MoveGenerator.algebraicNotation(for: move, in: currentPos, legalMoves: legal)
                     let newNode = MoveNode(move: move, notation: notation, positionBefore: currentPos, parent: parentNode, plyIndex: ply, annotation: annotation)
                     if let parent = parentNode {
                         parent.children.append(newNode)
