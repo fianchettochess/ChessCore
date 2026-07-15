@@ -30,7 +30,13 @@ let package = Package(
         .visionOS(.v1),
     ],
     products: [
-        .library(name: "ChessCore", targets: ["ChessCore"]),
+        // Dynamic: ChessCore is linked by BOTH the Fianchetto app and its
+        // FianchettoTests bundle (directly, and transitively via BoardKit /
+        // FianchettoKit). As a static product each image gets its own copy of
+        // every ChessCore class/type, which the objc runtime flags as
+        // "implemented in both …" and which makes cross-image `is`/`as?`/`==`
+        // fragile. A dynamic product yields ONE shared instance at runtime.
+        .library(name: "ChessCore", type: .dynamic, targets: ["ChessCore"]),
     ],
     // DocC generation only — the swift-docc-plugin is a build-tool/command plugin
     // and adds NOTHING to the library's own dependency graph or its compiled
