@@ -85,6 +85,29 @@ func benchRepetitionKey(iterations: Int) {
     print("  repetitionKey: \(round1(secs / Double(iterations) * 1_000_000_000)) ns/call (\(iterations)x)")
 }
 
+func benchPGNExport(iterations: Int) {
+    let g = Game()
+    guard g.loadPGN(operaPGN) else { print("  PGN export: setup FAILED"); return }
+    _ = PGNExporter.export(game: g)  // warm (also builds default tags / date formatter)
+    var ok = 0
+    let secs = timeSeconds {
+        for _ in 0..<iterations where !PGNExporter.export(game: g).isEmpty { ok += 1 }
+    }
+    precondition(ok == iterations)
+    print("  PGN export 17-move game: \(round3(secs / Double(iterations) * 1_000_000)) µs/game (\(iterations)x)")
+}
+
+func benchUCIParse(iterations: Int) {
+    let line = "info depth 20 seldepth 28 multipv 1 score cp 34 nodes 1234567 nps 8901234 time 138 pv e2e4 e7e5 g1f3 b8c6 f1b5 a7a6"
+    _ = UCIOutputParser.parseInfo(line)  // warm
+    var ok = 0
+    let secs = timeSeconds {
+        for _ in 0..<iterations where UCIOutputParser.parseInfo(line) != nil { ok += 1 }
+    }
+    precondition(ok == iterations)
+    print("  UCI parseInfo: \(round1(secs / Double(iterations) * 1_000_000_000)) ns/line (\(iterations)x)")
+}
+
 #if DEBUG
 print("⚠️  DEBUG build — timings are ~100x slow and meaningless. Use: swift run -c release ChessCoreBench\n")
 #endif
@@ -95,6 +118,8 @@ benchPerft("startpos",
 benchPerft("kiwipete",
            fen: "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1",
            depth: 4, expected: 4_085_603)
-print("\nApp-relevant paths (parse / repetition):")
+print("\nApp-relevant paths (parse / repetition / export / UCI):")
 benchPGNParse(iterations: 20_000)
 benchRepetitionKey(iterations: 500_000)
+benchPGNExport(iterations: 20_000)
+benchUCIParse(iterations: 500_000)
