@@ -40,6 +40,10 @@ let package = Package(
     ],
     targets: [
         .target(name: "ChessCore", path: "Sources/ChessCore"),
+        // Release-only micro-benchmarks. Invisible to library consumers (they
+        // depend on the `ChessCore` library product) and never pulled into the
+        // Skip/Android transpile. Run: `swift run -c release ChessCoreBench`.
+        .executableTarget(name: "ChessCoreBench", dependencies: ["ChessCore"], path: "Sources/ChessCoreBench"),
         .testTarget(name: "ChessCoreTests", dependencies: ["ChessCore"], path: "Tests/ChessCoreTests"),
     ],
     // Swift 6 only. Carved files come from the app's Swift-5 target, so each is
