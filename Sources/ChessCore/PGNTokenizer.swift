@@ -508,6 +508,15 @@ public enum PGNParser {
         )
     }
 
+    /// The `[%clk H:MM:SS(.f)]` pattern, compiled ONCE. Broadcast/Lichess PGNs
+    /// carry a clock tag on every ply, so the old
+    /// `range(of:options:.regularExpression)` recompiled this ICU pattern per
+    /// ply. `nonisolated(unsafe)` is sound: NSRegularExpression is documented
+    /// immutable + thread-safe for matching. (C2)
+    nonisolated(unsafe) private static let clockRegex = try! NSRegularExpression(
+        pattern: #"\[%clk\s+(\d+):(\d{2}):(\d{2}(?:\.\d+)?)\]"#
+    )
+
     public nonisolated static func parseEngineComment(_ text: String) -> (eval: String?, bestMove: String?, comment: String?, clockSeconds: TimeInterval?) {
         var remaining = text
         var clockSeconds: TimeInterval?
@@ -518,21 +527,22 @@ public enum PGNParser {
         // skipping it avoids compiling + scanning the regular expression on
         // every move comment during a full-library replay. Behaviour is
         // identical — when the literal is absent the regex cannot match.
-        if remaining.contains("[%clk"),
-           let clkRange = remaining.range(of: #"\[%clk\s+(\d+):(\d{2}):(\d{2}(?:\.\d+)?)\]"#, options: .regularExpression) {
-            let clkString = String(remaining[clkRange])
-            remaining.removeSubrange(clkRange)
-            remaining = remaining.trimmingCharacters(in: .whitespaces)
-            let scanner = Scanner(string: clkString)
-            scanner.charactersToBeSkipped = nil
-            _ = scanner.scanUpToCharacters(from: .decimalDigits)
-            if let h = scanner.scanInt() {
-                _ = scanner.scanString(":")
-                if let m = scanner.scanInt() {
-                    _ = scanner.scanString(":")
-                    if let s = scanner.scanDouble() {
-                        clockSeconds = Double(h) * 3600 + Double(m) * 60 + s
-                    }
+        if remaining.contains("[%clk") {
+            let ns = remaining as NSString
+            if let match = Self.clockRegex.firstMatch(
+                in: remaining, range: NSRange(location: 0, length: ns.length)
+            ) {
+                // Groups 1/2/3 are h / mm / ss(.f) — read them directly instead
+                // of re-scanning with a Foundation Scanner. Because the regex
+                // already matched \d+:\d{2}:\d{2}(\.\d+)?, these always parse.
+                if let h = Int(ns.substring(with: match.range(at: 1))),
+                   let m = Int(ns.substring(with: match.range(at: 2))),
+                   let s = Double(ns.substring(with: match.range(at: 3))) {
+                    clockSeconds = Double(h) * 3600 + Double(m) * 60 + s
+                }
+                if let r = Range(match.range, in: remaining) {
+                    remaining.removeSubrange(r)
+                    remaining = remaining.trimmingCharacters(in: .whitespaces)
                 }
             }
         }
