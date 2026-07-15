@@ -41,8 +41,10 @@ typealias Bitboard = UInt64
 struct LeaperTables {
     let knight: [Bitboard]
     let king: [Bitboard]
-    // pawn[0] = white pawn attacks, pawn[1] = black pawn attacks
-    let pawn: [[Bitboard]]
+    // Flattened pawn attacks: index `color*64 + sq` (0 = white, 1 = black). A
+    // flat array avoids the inner-`[Bitboard]` retain of a nested `[[Bitboard]]`
+    // on every pawn lookup — deterministic on swift-corelibs / Skip. (C1)
+    let pawn: [Bitboard]
 
     init() {
         var knight = [Bitboard](repeating: 0, count: 64)
@@ -83,7 +85,7 @@ struct LeaperTables {
 
         self.knight = knight
         self.king = king
-        self.pawn = [whitePawn, blackPawn]
+        self.pawn = whitePawn + blackPawn
     }
 }
 
@@ -99,12 +101,41 @@ struct MagicEntry {
 }
 
 struct MagicTables {
-    let rook: [MagicEntry]
-    let bishop: [MagicEntry]
+    // Struct-of-arrays slider tables. Each square's attack block is concatenated
+    // into one flat `*Attacks` array at `*Offset[sq]`, so a lookup is a plain
+    // subscript with no per-square MagicEntry copy / inner-array retain — the
+    // cross-platform (swift-corelibs / Skip) win. Built once from the embedded
+    // magics via `buildAll` (which still returns `[MagicEntry]` for the dev magic
+    // dump + the collision-free test). (C1)
+    let rookMask: [Bitboard], rookMagic: [Bitboard], rookShift: [UInt64]
+    let rookOffset: [Int], rookAttacks: [Bitboard]
+    let bishopMask: [Bitboard], bishopMagic: [Bitboard], bishopShift: [UInt64]
+    let bishopOffset: [Int], bishopAttacks: [Bitboard]
 
     init() {
-        self.rook = MagicTables.buildAll(isRook: true)
-        self.bishop = MagicTables.buildAll(isRook: false)
+        (rookMask, rookMagic, rookShift, rookOffset, rookAttacks) =
+            MagicTables.flatten(MagicTables.buildAll(isRook: true))
+        (bishopMask, bishopMagic, bishopShift, bishopOffset, bishopAttacks) =
+            MagicTables.flatten(MagicTables.buildAll(isRook: false))
+    }
+
+    /// Concatenate 64 per-square `MagicEntry` attack blocks into parallel
+    /// scalar arrays + one flat attack array (`offset[sq]` = start of square
+    /// `sq`'s block). Values are identical to the array-of-struct layout.
+    private static func flatten(
+        _ entries: [MagicEntry]
+    ) -> (mask: [Bitboard], magic: [Bitboard], shift: [UInt64], offset: [Int], attacks: [Bitboard]) {
+        var mask = [Bitboard](); mask.reserveCapacity(64)
+        var magic = [Bitboard](); magic.reserveCapacity(64)
+        var shift = [UInt64](); shift.reserveCapacity(64)
+        var offset = [Int](); offset.reserveCapacity(64)
+        var attacks: [Bitboard] = []
+        for e in entries {
+            mask.append(e.mask); magic.append(e.magic); shift.append(e.shift)
+            offset.append(attacks.count)
+            attacks.append(contentsOf: e.attacks)
+        }
+        return (mask, magic, shift, offset, attacks)
     }
 
     // Deterministic xorshift* PRNG so magic search is reproducible.
@@ -344,18 +375,16 @@ final class Magics: @unchecked Sendable {
     @inline(__always) func knightAttacks(_ sq: Int) -> Bitboard { leapers.knight[sq] }
     @inline(__always) func kingAttacks(_ sq: Int) -> Bitboard { leapers.king[sq] }
     /// `color`: 0 = white, 1 = black.
-    @inline(__always) func pawnAttacks(_ sq: Int, color: Int) -> Bitboard { leapers.pawn[color][sq] }
+    @inline(__always) func pawnAttacks(_ sq: Int, color: Int) -> Bitboard { leapers.pawn[color * 64 + sq] }
 
     @inline(__always) func rookAttacks(_ sq: Int, occupancy: Bitboard) -> Bitboard {
-        let e = magics.rook[sq]
-        let idx = Int(((occupancy & e.mask) &* e.magic) >> e.shift)
-        return e.attacks[idx]
+        let idx = Int(((occupancy & magics.rookMask[sq]) &* magics.rookMagic[sq]) >> magics.rookShift[sq])
+        return magics.rookAttacks[magics.rookOffset[sq] + idx]
     }
 
     @inline(__always) func bishopAttacks(_ sq: Int, occupancy: Bitboard) -> Bitboard {
-        let e = magics.bishop[sq]
-        let idx = Int(((occupancy & e.mask) &* e.magic) >> e.shift)
-        return e.attacks[idx]
+        let idx = Int(((occupancy & magics.bishopMask[sq]) &* magics.bishopMagic[sq]) >> magics.bishopShift[sq])
+        return magics.bishopAttacks[magics.bishopOffset[sq] + idx]
     }
 
     @inline(__always) func queenAttacks(_ sq: Int, occupancy: Bitboard) -> Bitboard {
