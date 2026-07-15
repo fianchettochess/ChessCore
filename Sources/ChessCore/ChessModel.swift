@@ -310,10 +310,11 @@ public nonisolated struct Position: Equatable, Sendable {
         }
     }
 
-    public var fen: String {
-        var result = ""
-        result.reserveCapacity(80)
-
+    /// The first four FEN fields — placement, side to move, castling, en-passant
+    /// — i.e. everything that defines position identity. `fen` appends the two
+    /// counters; `positionKey` stops here. Shared so `positionKey` builds the key
+    /// directly instead of formatting the whole FEN and splitting it back apart.
+    private func appendPositionFields(to result: inout String) {
         for rank in stride(from: 7, through: 0, by: -1) {
             if rank < 7 { result += "/" }
             var empty = 0
@@ -341,13 +342,21 @@ public nonisolated struct Position: Equatable, Sendable {
 
         result += " "
         result += enPassantTarget?.algebraic ?? "-"
-        result += " \(halfmoveClock) \(fullmoveNumber)"
+    }
 
+    public var fen: String {
+        var result = ""
+        result.reserveCapacity(80)
+        appendPositionFields(to: &result)
+        result += " \(halfmoveClock) \(fullmoveNumber)"
         return result
     }
 
     public var positionKey: String {
-        return fen.split(separator: " ").prefix(4).joined(separator: " ")
+        var result = ""
+        result.reserveCapacity(72)
+        appendPositionFields(to: &result)
+        return result
     }
 
     /// Position identity for the threefold-repetition rule.
