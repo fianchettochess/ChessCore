@@ -144,7 +144,11 @@ public enum PGNParser {
         // would manufacture a valid-looking but incomplete game.
         var moveTextOverflow = false
 
-        for line in pgn.components(separatedBy: .newlines) {
+        // stdlib split (Substrings share the parent buffer) instead of
+        // Foundation `components(separatedBy: .newlines)` (a String copy per
+        // line + CharacterSet). CRLF yields one fewer empty subsequence, which
+        // the empty-line skip below absorbs. (C4)
+        for line in pgn.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
 
             if trimmed.hasPrefix("[") && trimmed.hasSuffix("]") {
