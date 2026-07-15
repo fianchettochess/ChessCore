@@ -10,7 +10,22 @@ import Foundation
 /// free so it's portable. `positionAfter` is computed lazily via the move
 /// generator and cached.
 public final class MoveNode: Identifiable {
-    public let id = UUID()
+    private var _id: UUID?
+
+    /// Stable identity, generated lazily. PGN import builds many nodes that
+    /// are never shown in UI (tactics re-parse, bulk analysis); deferring the
+    /// `UUID()` draw until something actually reads `id` skips a per-node
+    /// CSPRNG call on that path — measurable on Linux/Android, where `UUID()`
+    /// is a `getrandom` syscall rather than Darwin's cheap arc4random. Once
+    /// read the value is cached, so identity stays stable for the node's
+    /// lifetime (SwiftUI diffing, the `gameState` cache key). (B7)
+    public var id: UUID {
+        if let cached = _id { return cached }
+        let u = UUID()
+        _id = u
+        return u
+    }
+
     public let move: Move
     public let notation: String
     public let positionBefore: Position
