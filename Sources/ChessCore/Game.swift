@@ -143,7 +143,7 @@ public final class Game {
         var node = currentNode
         var steps = 0
         while let n = node, steps < limit {
-            if n.positionBefore.repetitionKey == key {
+            if n.repetitionKey == key {
                 count += 1
                 if count >= 3 { return true }
             }
