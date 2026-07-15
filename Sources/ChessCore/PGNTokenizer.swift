@@ -261,18 +261,26 @@ public enum PGNParser {
     }
 
     public nonisolated static func parseMove(_ san: String, in position: Position) -> Move? {
+        parseMove(san, in: position, legalMoves: MoveGenerator.legalMoves(for: position))
+    }
+
+    /// SAN → Move against a PRECOMPUTED legal-move list, so a decoder that has
+    /// already generated the list (e.g. for `algebraicNotation`) does not
+    /// regenerate it. Identical result to `parseMove(_:in:)`, which delegates
+    /// here with a freshly generated list. (B2)
+    public nonisolated static func parseMove(_ san: String, in position: Position, legalMoves: [Move]) -> Move? {
         let cleaned = String(san.filter { $0 != "+" && $0 != "#" && $0 != "!" && $0 != "?" })
             .trimmingCharacters(in: .whitespaces)
 
         if cleaned == "O-O" || cleaned == "0-0" {
             let rank = position.activeColor == .white ? 0 : 7
-            return MoveGenerator.findLegalMoves(for: position, piece: .king, to: Square(file: 6, rank: rank))
-                .first { $0.isCastling }
+            let target = Square(file: 6, rank: rank)
+            return legalMoves.first { $0.piece == .king && $0.to == target && $0.isCastling }
         }
         if cleaned == "O-O-O" || cleaned == "0-0-0" {
             let rank = position.activeColor == .white ? 0 : 7
-            return MoveGenerator.findLegalMoves(for: position, piece: .king, to: Square(file: 2, rank: rank))
-                .first { $0.isCastling }
+            let target = Square(file: 2, rank: rank)
+            return legalMoves.first { $0.piece == .king && $0.to == target && $0.isCastling }
         }
 
         var remaining = cleaned
@@ -316,22 +324,22 @@ public enum PGNParser {
             }
         }
 
-        let candidates = MoveGenerator.findLegalMoves(for: position, piece: pieceType, to: target)
-            .filter { move in
-                // A promotion piece is part of SAN, not an optional hint. An
-                // omitted suffix must not silently select the queen from the
-                // otherwise-identical legal promotion moves.
-                guard move.promotion == promotion else { return false }
+        let candidates = legalMoves.filter { move in
+            guard move.piece == pieceType, move.to == target else { return false }
+            // A promotion piece is part of SAN, not an optional hint. An
+            // omitted suffix must not silently select the queen from the
+            // otherwise-identical legal promotion moves.
+            guard move.promotion == promotion else { return false }
 
-                if let df = disambigFile {
-                    guard move.from.file == df else { return false }
-                }
-                if let dr = disambigRank {
-                    guard move.from.rank == dr else { return false }
-                }
-
-                return true
+            if let df = disambigFile {
+                guard move.from.file == df else { return false }
             }
+            if let dr = disambigRank {
+                guard move.from.rank == dr else { return false }
+            }
+
+            return true
+        }
 
         if candidates.count == 1 {
             return candidates[0]
@@ -408,7 +416,10 @@ public enum PGNParser {
             case .move(let san):
                 guard variationDepth == 0 else { continue }
                 let (cleanedSan, annotation) = MoveAnnotation.extract(from: san)
-                guard let move = parseMove(cleanedSan, in: position) else {
+                // Generate the legal-move list once for both the SAN parse and
+                // the canonical-notation derivation. (B2)
+                let legal = MoveGenerator.legalMoves(for: position)
+                guard let move = parseMove(cleanedSan, in: position, legalMoves: legal) else {
                     // Never skip a failed main-line token and continue from the
                     // wrong board. Discard the partial snapshot and report the
                     // exact point at which interpretation stopped.
@@ -424,7 +435,7 @@ public enum PGNParser {
                     )
                 }
                 let positionBefore = position
-                let notation = MoveGenerator.algebraicNotation(for: move, in: positionBefore)
+                let notation = MoveGenerator.algebraicNotation(for: move, in: positionBefore, legalMoves: legal)
                 MoveGenerator.applyMoveUnchecked(&position, move)
                 moves.append(MainLineMoveSnapshot(
                     move: move,
