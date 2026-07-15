@@ -349,16 +349,17 @@ struct BitBoard {
     // MARK: Legal move generation
 
     mutating func legalMoves() -> [Move] {
-        var pseudo: [Move] = []
-        pseudo.reserveCapacity(48)
-        generatePseudoLegal(into: &pseudo)
-
-        var legal: [Move] = []
-        legal.reserveCapacity(pseudo.count)
-        for move in pseudo where isLegal(move) {
-            legal.append(move)
-        }
-        return legal
+        var moves: [Move] = []
+        moves.reserveCapacity(48)
+        generatePseudoLegal(into: &moves)
+        // Filter pseudo-legal down to legal IN PLACE — one buffer, instead of
+        // allocating a second `legal` array and copying the survivors across.
+        // `isLegal` is a read-only make/unmake check (non-mutating), so
+        // compacting `moves` while calling it is safe. `isLegal` runs exactly
+        // once per pseudo move either way; this only drops the extra ~48-slot
+        // allocation per call, which perft makes millions of. (A1)
+        moves.removeAll { !isLegal($0) }
+        return moves
     }
 
     /// Castling-only fast path. Mirrors `kingMoves` castling branch + `isLegal`
