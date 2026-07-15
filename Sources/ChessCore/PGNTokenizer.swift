@@ -511,9 +511,10 @@ public enum PGNParser {
     /// The `[%clk H:MM:SS(.f)]` pattern, compiled ONCE. Broadcast/Lichess PGNs
     /// carry a clock tag on every ply, so the old
     /// `range(of:options:.regularExpression)` recompiled this ICU pattern per
-    /// ply. `nonisolated(unsafe)` is sound: NSRegularExpression is documented
-    /// immutable + thread-safe for matching. (C2)
-    nonisolated(unsafe) private static let clockRegex = try! NSRegularExpression(
+    /// ply. Sharing one instance across plies and threads is sound —
+    /// NSRegularExpression is documented immutable + thread-safe for matching,
+    /// and is now a Sendable type, so a plain `static let` needs no annotation. (C2)
+    private static let clockRegex = try! NSRegularExpression(
         pattern: #"\[%clk\s+(\d+):(\d{2}):(\d{2}(?:\.\d+)?)\]"#
     )
 

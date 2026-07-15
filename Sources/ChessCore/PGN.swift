@@ -354,7 +354,7 @@ extension PGNExporter {
     /// calendar + ICU — expensive to instantiate (worse on swift-corelibs /
     /// SkipFoundation), and it was rebuilt on every export. Immutable after
     /// configuration and used only for formatting, so sharing is safe. (C5)
-    nonisolated(unsafe) private static let pgnDateFormatter: DateFormatter = {
+    private static let pgnDateFormatter: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "yyyy.MM.dd"
         return f
