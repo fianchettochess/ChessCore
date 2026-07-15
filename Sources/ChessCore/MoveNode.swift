@@ -65,6 +65,18 @@ public final class MoveNode: Identifiable {
         return pos
     }
 
+    private var _repetitionKey: String?
+
+    /// `positionBefore.repetitionKey`, computed once. `positionBefore` is a
+    /// `let`, so the cached key never goes stale; the threefold-repetition walk
+    /// reuses it across the many game-state checks a game accrues. (B1)
+    var repetitionKey: String {
+        if let cached = _repetitionKey { return cached }
+        let key = positionBefore.repetitionKey
+        _repetitionKey = key
+        return key
+    }
+
     public var mainContinuation: MoveNode? { children.first }
     public var variations: ArraySlice<MoveNode> { children.dropFirst() }
     public var hasVariations: Bool { children.count > 1 }
