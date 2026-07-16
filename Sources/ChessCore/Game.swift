@@ -307,6 +307,17 @@ public final class Game {
     /// per-move side effects (clock switching, haptics on a physical-board
     /// resync) can replay the path through their own `apply` wrapper.
     public func reconcilePath(toPlacementOf target: Position, maxPly: Int = 4) -> [Move]? {
+        Self.reconcilePath(from: position, toPlacementOf: target, maxPly: maxPly)
+    }
+
+    /// Pure variant of ``reconcilePath(toPlacementOf:maxPly:)`` searching from an
+    /// arbitrary start position. Retract-aware corrections probe each ancestor of
+    /// the current line with this before falling back to a destructive reload.
+    public static func reconcilePath(
+        from start: Position,
+        toPlacementOf target: Position,
+        maxPly: Int = 4
+    ) -> [Move]? {
         func placementKey(_ p: Position) -> String {
             let parts = p.fen.split(separator: " ")
             let placement = parts.first.map(String.init) ?? ""
@@ -315,12 +326,12 @@ public final class Game {
         }
 
         let targetKey = placementKey(target)
-        if placementKey(position) == targetKey { return [] }   // already in sync
+        if placementKey(start) == targetKey { return [] }   // already in sync
 
         // Breadth-first over legal-move sequences, deduped by placement so the search
         // stays small even at the default depth.
-        var frontier: [(pos: Position, path: [Move])] = [(position, [])]
-        var seen: Set<String> = [placementKey(position)]
+        var frontier: [(pos: Position, path: [Move])] = [(start, [])]
+        var seen: Set<String> = [placementKey(start)]
         for _ in 0..<max(0, maxPly) {
             var next: [(pos: Position, path: [Move])] = []
             for (pos, path) in frontier {
