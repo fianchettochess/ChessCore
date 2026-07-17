@@ -36,7 +36,11 @@ extension PGNParser {
         from pgnGame: PGNGame,
         maximumTreeNodes: Int
     ) throws -> Game {
-        precondition(maximumTreeNodes > 0)
+        // A non-positive node budget admits no tree at all; surface it as a
+        // catchable diagnostic rather than trapping a public throwing API.
+        guard maximumTreeNodes > 0 else {
+            throw PGNDiagnostic.moveTreeNodeLimitExceeded(maximumNodes: maximumTreeNodes)
+        }
         let game = Game()
 
         // Share the snapshot parser's FEN interpretation so the two public PGN
