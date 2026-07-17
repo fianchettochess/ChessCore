@@ -104,7 +104,10 @@ public nonisolated struct Square: Hashable, Equatable, Codable, Sendable {
     }
 
     public var fileChar: Character {
-        Character(UnicodeScalar(97 + file)!)
+        // `Square.init(file:rank:)` is public and unchecked, so `file` may be out
+        // of range. Clamp to a…h using the non-failable UInt8 scalar initializer
+        // so a display accessor can never trap. Valid squares are unaffected.
+        Character(UnicodeScalar(UInt8(97 + min(max(file, 0), 7))))
     }
 
     public var algebraic: String {
@@ -443,7 +446,16 @@ public nonisolated struct Position: Equatable, Sendable {
             guard let target = Square(algebraic: String(parts[3])),
                   target.rank == (activeColor == .white ? 5 : 2)
             else { return nil }
-            enPassantTarget = target
+            // Honor the EP target only when the enemy pawn that would be captured
+            // is actually present on the square it just double-pushed to.
+            // Otherwise pseudo-legal generation would emit an en-passant capture
+            // of an empty square (an illegal move). A stale/phantom EP field is
+            // silently dropped, not rejected — the rest of the FEN is valid.
+            let capturedRank = activeColor == .white ? target.rank - 1 : target.rank + 1
+            let mover: PieceColor = activeColor == .white ? .black : .white
+            if self[Square(file: target.file, rank: capturedRank)] == Piece(type: .pawn, color: mover) {
+                enPassantTarget = target
+            }
         }
 
         if parts.count == 6 {

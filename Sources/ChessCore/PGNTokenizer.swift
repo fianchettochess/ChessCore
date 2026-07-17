@@ -314,11 +314,18 @@ public enum PGNParser {
         // misread can never silently select a non-promotion move.
         if promotion == nil,
            remaining.count >= 3,
-           let last = remaining.last,
-           let promoted = pieceTypeFromChar(Character(last.uppercased())),
-           promoted != .king {
-            promotion = promoted
-            remaining = String(remaining.dropLast())
+           let last = remaining.last {
+            // `Character.uppercased()` returns a String; for a character whose
+            // uppercase is multiple graphemes (e.g. "ß" → "SS"), `Character(_:)`
+            // would trap on its single-grapheme precondition. Only a
+            // single-scalar uppercase can be a promotion letter, so gate on that.
+            let upper = last.uppercased()
+            if upper.count == 1,
+               let promoted = pieceTypeFromChar(Character(upper)),
+               promoted != .king {
+                promotion = promoted
+                remaining = String(remaining.dropLast())
+            }
         }
 
         guard let firstChar = remaining.first else { return nil }

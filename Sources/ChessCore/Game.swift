@@ -9,6 +9,11 @@ import Foundation
 /// and SwiftUI `@Observable` conformance live in the app's wrapper on the other
 /// side of the boundary; here `apply(_:)` performs only the tree/position
 /// mutation and the app layer adds clock/sound after it.
+///
+/// - Important: `Game` (and the `MoveNode` tree it owns) is a reference type and
+///   is **not** thread-safe. Some node properties are memoized lazily on first
+///   read, so even concurrent *reads* of the same game can race. Confine a `Game`
+///   to a single actor/thread (it is intentionally not `Sendable`).
 public final class Game {
     public private(set) var position: Position = .initial()
     public private(set) var startPosition: Position = .initial()
