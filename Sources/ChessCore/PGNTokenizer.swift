@@ -305,6 +305,22 @@ public enum PGNParser {
             remaining = String(remaining[remaining.startIndex..<eqIdx])
         }
 
+        // Promotion written WITHOUT '=' — PGN-lenient "exd8Q" and the
+        // coordinate dialect the ChessUp mobile app exports ("a7b8q"). Safe to
+        // strip here: a valid SAN token otherwise always ends in a rank digit
+        // at this point (castling returned above; +/#/!? suffixes already
+        // filtered), so a trailing piece letter can only be a promotion. The
+        // candidate filter still requires an exact promotion match, so a
+        // misread can never silently select a non-promotion move.
+        if promotion == nil,
+           remaining.count >= 3,
+           let last = remaining.last,
+           let promoted = pieceTypeFromChar(Character(last.uppercased())),
+           promoted != .king {
+            promotion = promoted
+            remaining = String(remaining.dropLast())
+        }
+
         guard let firstChar = remaining.first else { return nil }
         if firstChar.isUppercase {
             pieceType = pieceTypeFromChar(firstChar) ?? .pawn
