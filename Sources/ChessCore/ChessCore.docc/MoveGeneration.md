@@ -18,10 +18,10 @@ moves filtered to exclude any that leave the mover's own king in check:
 let legal = MoveGenerator.legalMoves(for: .initial())   // 20 moves
 ```
 
-The result is *cached* on the position's ``Position/positionKey``. Legal moves
-are fully determined by the position with no side effects, so cached values never
-need invalidation — repeated lookups and transposing trees benefit
-automatically, and the cache is thread-safe.
+Generation is uncached: magic-bitboard generation is fast enough that the old
+`positionKey`-keyed result cache was removed as a net pessimization —
+regenerating is cheaper than building the cache's string key. ``Game`` keeps
+its own single-slot per-position cache.
 
 To narrow generation — for SAN disambiguation or parsing a PGN move — use
 ``MoveGenerator/findLegalMoves(for:piece:to:)``:
@@ -120,9 +120,9 @@ let kiwipete = Position(fen:
 assert(perft(kiwipete, depth: 3) == 97_862)
 ```
 
-> Tip: Because ``MoveGenerator/legalMoves(for:)`` caches on
-> ``Position/positionKey``, a perft walk over a transposing tree reuses work
-> automatically — no extra bookkeeping required.
+> Tip: A perft walk regenerates moves at every node — generation is uncached,
+> and fast enough that a result cache was a net pessimization. Run the
+> full-depth suite under the release configuration (`swift test -c release`).
 
 ## See Also
 

@@ -180,7 +180,7 @@ public struct Position: Equatable, Sendable {
     public static func initial() -> Position // standard start
 
     public var fen: String                   // full FEN incl. counters
-    public var positionKey: String           // FEN without counters (the cache/legality key)
+    public var positionKey: String           // FEN without counters (the legality/transposition key)
     public var stockfishSafeFEN: String      // sanitized for a strict UCI engine
     public var capturableEnPassantTarget: Square?  // EP only when a capture exists
     public var hasInsufficientMaterial: Bool

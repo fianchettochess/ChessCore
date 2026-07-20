@@ -3,7 +3,6 @@
 [![Swift Package Index — Swift versions](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2Ffianchettochess%2FChessCore%2Fbadge%3Ftype%3Dswift-versions)](https://swiftpackageindex.com/fianchettochess/ChessCore)
 [![Swift Package Index — Platforms](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2Ffianchettochess%2FChessCore%2Fbadge%3Ftype%3Dplatforms)](https://swiftpackageindex.com/fianchettochess/ChessCore)
 [![Release](https://img.shields.io/github/v/release/fianchettochess/ChessCore?sort=semver&label=release&color=blue)](https://github.com/fianchettochess/ChessCore/releases)
-[![CI](https://github.com/fianchettochess/ChessCore/actions/workflows/ci.yml/badge.svg)](https://github.com/fianchettochess/ChessCore/actions/workflows/ci.yml)
 [![Linux CI](https://github.com/fianchettochess/ChessCore/actions/workflows/ci-linux.yml/badge.svg)](https://github.com/fianchettochess/ChessCore/actions/workflows/ci-linux.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
@@ -11,7 +10,7 @@ A portable, Foundation-only Swift chess library: the position model,
 perft-verified move generation, FEN, SAN/UCI, PGN, a game tree, and UCI
 engine-output parsing. It has no Apple-UI or platform dependencies.
 
-ChessCore provides the chess engine and model only. Higher-level analysis,
+**ChessCore** provides the chess engine and model only. Higher-level analysis,
 statistics, and persistence are intended to live in separate packages built on
 top of it, keeping the core small, portable, and free of presentation concerns.
 
@@ -21,8 +20,9 @@ top of it, keeping the core small, portable, and free of presentation concerns.
   SwiftUI, Combine, CoreBluetooth, or networking. Presentation and engine access
   are defined behind protocol seams, and the value types are `Sendable`.
 - **Broad platform support.** A declared deployment target of iOS 13 / macOS
-  10.15 (tvOS 13, watchOS 6, visionOS 1); the source compiles to iOS 11 / macOS
-  10.10, and cross-compiles for Linux and Android
+  10.15 (tvOS 13, watchOS 6, visionOS 1) — a hard floor set by the async engine
+  seams (Swift-concurrency back-deployment); the pure value types would build
+  lower on their own. Cross-compiles for Linux and Android
   (`aarch64-unknown-linux-android28`).
 - **Verified correctness.** Magic-bitboard move generation, validated by a perft
   suite with exact node counts (initial `perft(5)` = 4,865,609; Kiwipete
@@ -34,14 +34,14 @@ top of it, keeping the core small, portable, and free of presentation concerns.
 | Area | Types |
 |---|---|
 | Board model | `Position`, `Move`, `Square`, `Piece`, `PieceColor`, `PieceType`, `CastlingRights`, `GameState`, `MoveAnnotation`, `MoveQuality` |
-| Move generation | `MoveGenerator` — legal and pseudo-legal moves, make-move, attack detection, SAN, perft |
+| Move generation | `MoveGenerator` — legal moves, make-move (`applyMoveUnchecked`), check/attack detection, SAN (`algebraicNotation`); perft-verified (suite in `Tests/`, harness in `ChessCoreBench`) |
 | Game tree | `Game`, `MoveNode`, `GameTreeSnapshot` |
 | FEN | `Position(fen:)`, `Position.fen`, `positionKey`, `stockfishSafeFEN` |
 | Notation and PGN | `UCIParser` (SAN/UCI), `PGNParser`, `PGNExporter`, `PGNGame`, `GameTagCodec` |
-| Engine interface | `ChessEngine`, `EngineAnalysis`, `UCIOutputParser`, `UCIInfo`, `EngineError` |
+| Engine interface | `ChessEngine`, `UCIEngine`, `EngineAnalysis`, `UCIOutputParser`, `UCIInfo`, `EngineError` |
 
-The `ChessEngine` protocol and `EngineAnalysis` types define an engine interface
-independent of any concrete engine. Conforming types may wrap
+The `ChessEngine` and `UCIEngine` protocols and the `EngineAnalysis` types
+define an engine interface independent of any concrete engine. Conforming types may wrap
 [SwiftStockfish](https://github.com/fianchettochess/SwiftStockfish) or a neural
 network engine.
 
@@ -50,12 +50,15 @@ network engine.
 Add the package with Swift Package Manager:
 
 ```swift
-.package(url: "https://github.com/fianchettochess/ChessCore.git", from: "0.1.0")
+.package(url: "https://github.com/fianchettochess/ChessCore.git", from: "0.7.1")
 ```
+
+The repo is private until release, so local-path sibling checkouts
+(`.package(path: "../ChessCore")`) are the working form today.
 
 Then add `"ChessCore"` to the dependencies of any target that uses it.
 
-## Example
+## Quick start
 
 ```swift
 import ChessCore
