@@ -53,9 +53,6 @@ Add the package with Swift Package Manager:
 .package(url: "https://github.com/fianchettochess/ChessCore.git", from: "0.7.1")
 ```
 
-The repo is private until release, so local-path sibling checkouts
-(`.package(path: "../ChessCore")`) are the working form today.
-
 Then add `"ChessCore"` to the dependencies of any target that uses it.
 
 ## Quick start
