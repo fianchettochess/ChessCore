@@ -1,5 +1,12 @@
 # ChessCore
 
+[![Swift Package Index — Swift versions](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2Ffianchettochess%2FChessCore%2Fbadge%3Ftype%3Dswift-versions)](https://swiftpackageindex.com/fianchettochess/ChessCore)
+[![Swift Package Index — Platforms](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2Ffianchettochess%2FChessCore%2Fbadge%3Ftype%3Dplatforms)](https://swiftpackageindex.com/fianchettochess/ChessCore)
+[![Release](https://img.shields.io/github/v/release/fianchettochess/ChessCore?sort=semver&label=release&color=blue)](https://github.com/fianchettochess/ChessCore/releases)
+[![CI](https://github.com/fianchettochess/ChessCore/actions/workflows/ci.yml/badge.svg)](https://github.com/fianchettochess/ChessCore/actions/workflows/ci.yml)
+[![Linux CI](https://github.com/fianchettochess/ChessCore/actions/workflows/ci-linux.yml/badge.svg)](https://github.com/fianchettochess/ChessCore/actions/workflows/ci-linux.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 A portable, Foundation-only Swift chess library: the position model,
 perft-verified move generation, FEN, SAN/UCI, PGN, a game tree, and UCI
 engine-output parsing. It has no Apple-UI or platform dependencies.
