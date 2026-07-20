@@ -9,10 +9,13 @@ engine-output parsing — with no Apple-UI dependencies.
 - **Foundation-only.** No SwiftData, CloudKit, GameKit, CoreML, UIKit, AppKit,
   SwiftUI, Combine, or CoreBluetooth, and no networking. Presentation and engine
   access sit behind protocol seams.
-- **Wide reach.** Deployment floor declared at **iOS 13 / macOS 10.15** (and the
-  code builds down to iOS 11 / macOS 10.10).
-- **Cross-platform.** Builds for `aarch64-unknown-linux-android28` and passes its
-  test suite on macOS. Value types are `Sendable` and presentation-free.
+- **Wide reach.** Deployment floor declared at **iOS 13 / macOS 10.15** (tvOS 13,
+  watchOS 6, visionOS 1) — a hard floor set by the async engine seams
+  (Swift-concurrency back-deployment); the pure value types would build lower on
+  their own.
+- **Cross-platform.** Builds for `aarch64-unknown-linux-android28`, and the test
+  suite runs on macOS and on Linux (on-push CI on ubuntu-latest, `swift:latest`).
+  Value types are `Sendable` and presentation-free.
 - **Correct.** The move generator is validated by a **perft suite** with exact
   node counts (initial `perft(4) = 197281`, Kiwipete `perft(3) = 97862`, plus
   en-passant and promotion positions).

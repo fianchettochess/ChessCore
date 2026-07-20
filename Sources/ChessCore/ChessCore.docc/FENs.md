@@ -26,7 +26,7 @@ king squares. It returns `nil` on malformed input.
 | Accessor | What it contains | Use for |
 |---|---|---|
 | ``Position/fen`` | full standard FEN, including the halfmove and fullmove counters | display, storage, round-tripping |
-| ``Position/positionKey`` | FEN **without** the move counters (board + side + castling + EP) | the legality / move-cache key, transposition tables |
+| ``Position/positionKey`` | FEN **without** the move counters (board + side + castling + EP) | the legality / transposition key |
 | ``Position/stockfishSafeFEN`` | sanitized FEN safe for a strict UCI engine | any FEN that crosses into a UCI engine |
 
 ```swift

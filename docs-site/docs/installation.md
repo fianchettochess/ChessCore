@@ -14,8 +14,10 @@ dependencies — only Foundation.
 | watchOS | 6.0 |
 | visionOS | 1.0 |
 
-The floor is set by Swift-concurrency back-deployment; the code itself is pure
-Swift stdlib + Foundation and builds down to iOS 11 / macOS 10.10.
+The floor is a hard one set by the async engine seams (`ChessEngine.analyze`,
+`UCIEngine.output`) and Swift-concurrency back-deployment; the pure value types
+would build lower on their own, but the package cannot declare a lower target
+while those seams live in this module.
 
 ## Add the package
 
@@ -24,7 +26,7 @@ Swift stdlib + Foundation and builds down to iOS 11 / macOS 10.10.
 ```swift
 // Package.swift
 dependencies: [
-    .package(url: "https://github.com/fianchettochess/ChessCore", from: "0.1.0"),
+    .package(url: "https://github.com/fianchettochess/ChessCore", from: "0.7.1"),
 ],
 targets: [
     .target(

@@ -93,10 +93,11 @@ let kiwipete = Position(fen:
 assert(perft(kiwipete, depth: 3) == 97_862)
 ```
 
-> Note: ``MoveGenerator/legalMoves(for:)`` caches its result on the position's
-> ``Position/positionKey``. Legal moves are fully determined by the position with
-> no side effects, so cached values never need invalidation — perft over a
-> transposing tree benefits automatically.
+> Note: ``MoveGenerator/legalMoves(for:)`` regenerates on every call —
+> generation is uncached (the old ``Position/positionKey``-keyed result cache
+> was removed as a net pessimization). Legal moves are fully determined by the
+> position with no side effects, so regenerating is always safe; ``Game`` keeps
+> its own single-slot per-position cache.
 
 ## FEN and the engine boundary
 
@@ -105,7 +106,7 @@ A ``Position`` exposes three FEN-shaped accessors, each for a distinct purpose:
 - ``Position/fen`` — the full standard FEN, including the halfmove and fullmove
   counters. Use it for display, storage, and round-tripping.
 - ``Position/positionKey`` — the FEN *without* the move counters (board + side +
-  castling + EP). This is the legality/cache key and the right key for
+  castling + EP). This is the legality key and the right key for
   transposition tables.
 - ``Position/stockfishSafeFEN`` — a sanitized FEN for handing to a strict UCI
   engine. Stockfish's parser asserts on inconsistent metadata and aborts the

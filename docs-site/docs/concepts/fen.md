@@ -19,7 +19,7 @@ king squares. It returns `nil` on malformed input.
 | Accessor | What it contains | Use for |
 |---|---|---|
 | `fen` | full standard FEN, including the halfmove and fullmove counters | display, storage, round-tripping |
-| `positionKey` | FEN **without** the move counters (board + side + castling + EP) | the legality / move-cache key, transposition tables |
+| `positionKey` | FEN **without** the move counters (board + side + castling + EP) | the legality / transposition key |
 | `stockfishSafeFEN` | sanitized FEN safe for a strict UCI engine | any FEN that crosses into a UCI engine |
 
 ```swift
