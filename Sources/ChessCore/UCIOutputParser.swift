@@ -9,7 +9,7 @@ import Foundation
 /// move) until normalized to White-POV via
 /// ``whitePovCp(_:sideToMoveIsWhite:)`` or
 /// ``whitePovMate(_:sideToMoveIsWhite:)``.
-public nonisolated struct UCIInfo: Sendable, Equatable {
+public struct UCIInfo: Sendable, Equatable {
     /// Depth completed by the engine for this line.
     public var depth: Int?
     /// MultiPV rank (1 = best move, 2 = second-best, …).
@@ -145,7 +145,7 @@ public nonisolated struct UCIInfo: Sendable, Equatable {
 ///   apps' per-rank accumulators.
 /// - Parses `nps`.
 /// - `parseBestMove` treats `bestmove (none)` as `nil` (terminal position).
-public nonisolated enum UCIOutputParser {
+public enum UCIOutputParser {
 
     /// Parse a single engine output line. Returns a `UCIInfo` for `info …`
     /// lines; `nil` for anything else (`bestmove`, `readyok`, blanks, …).

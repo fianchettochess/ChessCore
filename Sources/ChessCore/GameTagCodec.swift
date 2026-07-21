@@ -7,7 +7,7 @@ import Foundation
 /// structured storage should generally preserve tags as ordered key/value pairs
 /// instead. Keeping this codec in ChessCore gives every consumer one set of
 /// escaping rules without coupling the core model to a persistence framework.
-public nonisolated enum GameTagCodec {
+public enum GameTagCodec {
 
     /// Encode an ordered PGN tag set. Keys and values are escaped for `\`,
     /// `=`, and `;` so the escape

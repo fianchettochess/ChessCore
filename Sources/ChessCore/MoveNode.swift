@@ -65,7 +65,7 @@ public final class MoveNode: Identifiable {
     /// position already carries the authoritative anchored number.
     public var moveNumber: Int { positionBefore.fullmoveNumber }
 
-    /// Colour of the side that PLAYED this move. Derived from the position the
+    /// Color of the side that PLAYED this move. Derived from the position the
     /// move was made in — NOT ply parity, which misattributes every move of a
     /// FEN-setup game where Black moves first (ply 0 is then Black's move).
     public var moverColor: PieceColor { positionBefore.activeColor }

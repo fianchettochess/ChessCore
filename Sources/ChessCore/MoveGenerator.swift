@@ -1,6 +1,6 @@
 import Foundation
 
-public nonisolated enum MoveGenerator {
+public enum MoveGenerator {
 
     // MARK: - Public API
 

@@ -2,7 +2,7 @@
 
 A portable, **Foundation-only** Swift chess core: the position model, legal move
 generation (with a perft-verified generator), FEN, SAN↔UCI, PGN, and UCI
-engine-output parsing — with no Apple-UI dependencies.
+engine-output parsing — with no Apple UI framework dependencies.
 
 ## Features
 
@@ -14,8 +14,9 @@ engine-output parsing — with no Apple-UI dependencies.
   (Swift-concurrency back-deployment); the pure value types would build lower on
   their own.
 - **Cross-platform.** Builds for `aarch64-unknown-linux-android28`, and the test
-  suite runs on macOS and on Linux (on-push CI on ubuntu-latest, `swift:latest`).
-  Value types are `Sendable` and presentation-free.
+  suite runs on macOS and on Linux. On-push Linux CI verifies both the declared
+  Swift 6.0 floor and the latest Swift image. Value types are `Sendable` and
+  presentation-free.
 - **Correct.** The move generator is validated by a **perft suite** with exact
   node counts (initial `perft(4) = 197281`, Kiwipete `perft(3) = 97862`, plus
   en-passant and promotion positions).

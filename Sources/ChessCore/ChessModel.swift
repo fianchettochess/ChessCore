@@ -14,7 +14,7 @@ import Foundation
 //   • MoveNode (@Observable; also depends on MoveGenerator — lands with tranche 3)
 // The Android app supplies its own (Compose) presentation over these same types.
 
-public nonisolated enum PieceColor: Equatable, Hashable, Codable, Sendable {
+public enum PieceColor: Equatable, Hashable, Codable, Sendable {
     case white, black
 
     public var opposite: PieceColor {
@@ -22,7 +22,7 @@ public nonisolated enum PieceColor: Equatable, Hashable, Codable, Sendable {
     }
 
     /// Stable "white"/"black" string used as a persisted/CloudKit key
-    /// (Repertoire.color, RepertoireMove colour predicates, stats maps).
+    /// (Repertoire.color, RepertoireMove color predicates, stats maps).
     /// Centralizes the on-disk contract that was inlined as
     /// `color == .white ? "white" : "black"` at ~20 sites. NOTE: SwiftData
     /// `#Predicate` bodies must keep the bare "white"/"black" literals —
@@ -68,11 +68,11 @@ public nonisolated enum PieceColor: Equatable, Hashable, Codable, Sendable {
     }
 }
 
-public nonisolated enum PieceType: Equatable, Hashable, Codable, Sendable {
+public enum PieceType: Equatable, Hashable, Codable, Sendable {
     case king, queen, rook, bishop, knight, pawn
 }
 
-public nonisolated struct Piece: Equatable, Hashable, Codable, Sendable {
+public struct Piece: Equatable, Hashable, Codable, Sendable {
     public let type: PieceType
     public let color: PieceColor
 
@@ -95,7 +95,7 @@ public nonisolated struct Piece: Equatable, Hashable, Codable, Sendable {
     }
 }
 
-public nonisolated struct Square: Hashable, Equatable, Codable, Sendable {
+public struct Square: Hashable, Equatable, Codable, Sendable {
     public let file: Int
     public let rank: Int
 
@@ -138,7 +138,7 @@ public nonisolated struct Square: Hashable, Equatable, Codable, Sendable {
     }
 }
 
-public nonisolated struct CastlingRights: Equatable, Hashable, Codable, Sendable {
+public struct CastlingRights: Equatable, Hashable, Codable, Sendable {
     public var whiteKingside = true
     public var whiteQueenside = true
     public var blackKingside = true
@@ -164,7 +164,7 @@ public nonisolated struct CastlingRights: Equatable, Hashable, Codable, Sendable
     )
 }
 
-public nonisolated struct Move: Equatable, Hashable, Sendable {
+public struct Move: Equatable, Hashable, Sendable {
     public let from: Square
     public let to: Square
     public let piece: PieceType
@@ -206,7 +206,7 @@ public nonisolated struct Move: Equatable, Hashable, Sendable {
     }
 }
 
-public nonisolated struct MoveRecord: Sendable {
+public struct MoveRecord: Sendable {
     public let move: Move
     public let notation: String
     public let positionBefore: Position
@@ -220,7 +220,7 @@ public nonisolated struct MoveRecord: Sendable {
 
 /// Move annotation symbols (NAG-ish). Only the chess/PGN logic lives here; the
 /// display name, SF Symbol, glyph, and tint are app-side presentation.
-public nonisolated enum MoveAnnotation: String, Equatable, Hashable, Sendable, CaseIterable {
+public enum MoveAnnotation: String, Equatable, Hashable, Sendable, CaseIterable {
     case brilliant = "!!"
     case great = "great"
     case best = "best"
@@ -268,11 +268,11 @@ public nonisolated enum MoveAnnotation: String, Equatable, Hashable, Sendable, C
 
 /// Engine move-quality classification. The enum (logic) lives here; its
 /// display name, SF Symbol, and tint are app-side presentation.
-public nonisolated enum MoveQuality: String, CaseIterable, Sendable {
+public enum MoveQuality: String, CaseIterable, Sendable {
     case best, excellent, good, inaccuracy, mistake, blunder
 }
 
-public nonisolated enum GameState: Equatable, Sendable {
+public enum GameState: Equatable, Sendable {
     case playing, check, checkmate, stalemate, draw, insufficientMaterial, repetition
 
     public var isGameOver: Bool {
@@ -283,7 +283,7 @@ public nonisolated enum GameState: Equatable, Sendable {
     }
 }
 
-public nonisolated struct Position: Equatable, Sendable {
+public struct Position: Equatable, Sendable {
     public var board: [Piece?]
     public var activeColor: PieceColor
     public var castlingRights: CastlingRights

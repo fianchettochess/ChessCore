@@ -2,7 +2,7 @@
 
 A portable, Foundation-only chess core: the position model, legal move
 generation, FEN, SAN↔UCI, PGN, and UCI engine-output parsing — with no
-Apple-UI dependencies.
+Apple UI framework dependencies.
 
 ## Overview
 

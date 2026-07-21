@@ -228,7 +228,7 @@ extension PGNExporter {
         return position.activeColor == .white ? base : base + 1
     }
 
-    /// Maximum variation nesting depth `writeLine` will honour. Real
+    /// Maximum variation nesting depth `writeLine` will honor. Real
     /// PGN tooling rarely exceeds 10–15 plies of variation nesting;
     /// the cap protects against crafted / corrupted files that nest
     /// variations to depths the call stack can't handle. Past the cap

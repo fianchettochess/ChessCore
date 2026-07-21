@@ -124,7 +124,7 @@ if let game = PGNParser.loadGame(from: pgnString) {
 
 // If you already have a PGNGame from PGNParser.parse(_:):
 if let game = PGNParser.loadGame(from: pgnGame) {
-    // SetUp/FEN tags are honoured: non-standard start positions work.
+    // SetUp/FEN tags are honored: non-standard start positions work.
 }
 ```
 

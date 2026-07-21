@@ -8,7 +8,8 @@
 
 A portable, Foundation-only Swift chess library: the position model,
 perft-verified move generation, FEN, SAN/UCI, PGN, a game tree, and UCI
-engine-output parsing. It has no Apple-UI or platform dependencies.
+engine-output parsing. It has no Apple UI framework dependencies or other
+platform-specific dependencies.
 
 **ChessCore** provides the chess engine and model only. Higher-level analysis,
 statistics, and persistence are intended to live in separate packages built on
@@ -44,9 +45,10 @@ top of it, keeping the core small, portable, and free of presentation concerns.
 | Engine interface | `ChessEngine`, `UCIEngine`, `EngineAnalysis`, `UCIOutputParser`, `UCIInfo`, `EngineError`; depth-aware MultiPV aggregation |
 
 The `ChessEngine` and `UCIEngine` protocols and the `EngineAnalysis` types
-define an engine interface independent of any concrete engine. Conforming types may wrap
-[SwiftStockfish](https://github.com/fianchettochess/SwiftStockfish) or a neural
-network engine.
+define an engine interface independent of any concrete engine. Conforming types
+may wrap [SwiftStockfish](https://github.com/fianchettochess/SwiftStockfish),
+[SwiftReckless](https://github.com/fianchettochess/SwiftReckless), or another
+UCI backend.
 
 ## Installation
 
@@ -90,6 +92,9 @@ under the release configuration:
 ```bash
 swift test -c release
 ```
+
+On-push Linux CI verifies both the declared Swift 6.0 floor and the latest
+Swift image.
 
 Cross-compiling for Android from a macOS host requires a Swift toolchain
 matching the Swift Android SDK and the NDK's `llvm-ar` as the librarian.

@@ -4,7 +4,7 @@ import Foundation
 ///
 /// Lenient warnings can travel on parsed values; failures that cannot safely
 /// produce a value also conform to `Error` for throwing APIs.
-public nonisolated enum PGNDiagnostic: Error, Equatable, Sendable {
+public enum PGNDiagnostic: Error, Equatable, Sendable {
     /// A tag roster was present but the record contained no movetext at all.
     case tagsOnlyRecord
     /// A supplied FEN tag could not be parsed, so no moves were interpreted.
@@ -17,7 +17,7 @@ public nonisolated enum PGNDiagnostic: Error, Equatable, Sendable {
 
 // MARK: - PGN Game model
 
-public nonisolated struct PGNGame: Identifiable, Sendable {
+public struct PGNGame: Identifiable, Sendable {
     public let id = UUID()
     public var tags: OrderedTags = OrderedTags()
     public var moves: [String] = []
@@ -25,15 +25,15 @@ public nonisolated struct PGNGame: Identifiable, Sendable {
     public var moveTokens: [PGNToken] = []
     public var diagnostics: [PGNDiagnostic] = []
 
-    public nonisolated init() {}
+    public init() {}
 
-    public nonisolated var white: String { tags["White"] ?? "?" }
-    public nonisolated var black: String { tags["Black"] ?? "?" }
-    public nonisolated var date: String { tags["Date"] ?? "?" }
-    public nonisolated var event: String { tags["Event"] ?? "" }
-    public nonisolated var resultText: String { result ?? tags["Result"] ?? "*" }
-    public nonisolated var opening: String { tags["Opening"] ?? tags["ECO"] ?? "" }
-    public nonisolated var moveCount: Int { (moves.count + 1) / 2 }
+    public var white: String { tags["White"] ?? "?" }
+    public var black: String { tags["Black"] ?? "?" }
+    public var date: String { tags["Date"] ?? "?" }
+    public var event: String { tags["Event"] ?? "" }
+    public var resultText: String { result ?? tags["Result"] ?? "*" }
+    public var opening: String { tags["Opening"] ?? tags["ECO"] ?? "" }
+    public var moveCount: Int { (moves.count + 1) / 2 }
 
     // Equatable is synthesized over (keys, values) — key ORDER participates in
     // equality, which is what tag-mirror change detection wants: any edit,
@@ -42,11 +42,11 @@ public nonisolated struct PGNGame: Identifiable, Sendable {
         private var keys: [String] = []
         private var values: [String: String] = [:]
 
-        public nonisolated init() {}
+        public init() {}
 
-        public nonisolated static let sevenTagRoster = ["Event", "Site", "Date", "Round", "White", "Black", "Result"]
+        public static let sevenTagRoster = ["Event", "Site", "Date", "Round", "White", "Black", "Result"]
 
-        public nonisolated subscript(key: String) -> String? {
+        public subscript(key: String) -> String? {
             get { values[key] }
             set {
                 if let newValue {
@@ -59,7 +59,7 @@ public nonisolated struct PGNGame: Identifiable, Sendable {
             }
         }
 
-        public nonisolated var orderedKeys: [String] {
+        public var orderedKeys: [String] {
             let roster = Self.sevenTagRoster.filter { values[$0] != nil }
             let rest = keys.filter { !Self.sevenTagRoster.contains($0) }
             return roster + rest
@@ -68,15 +68,15 @@ public nonisolated struct PGNGame: Identifiable, Sendable {
         /// Raw insertion order used by lossless model snapshots. PGN export
         /// intentionally continues to use `orderedKeys`, which projects the
         /// canonical Seven Tag Roster ahead of supplemental tags.
-        nonisolated var insertionOrderedKeys: [String] { keys }
+        var insertionOrderedKeys: [String] { keys }
 
-        public nonisolated var isEmpty: Bool { keys.isEmpty }
+        public var isEmpty: Bool { keys.isEmpty }
     }
 }
 
 // MARK: - PGN Tokens
 
-public nonisolated enum PGNToken: Sendable {
+public enum PGNToken: Sendable {
     case move(String)
     case variationStart
     case variationEnd
@@ -90,7 +90,7 @@ public nonisolated enum PGNToken: Sendable {
 /// downstream consumers need without the main-actor-bound `Game` /
 /// `MoveNode` class graph. Build this from a `Task.detached` on PGN text;
 /// hop back to main only if you need to construct a live `Game` from it.
-public nonisolated struct MainLineMoveSnapshot: Sendable {
+public struct MainLineMoveSnapshot: Sendable {
     public let move: Move
     public let notation: String
     public let positionBefore: Position
@@ -102,7 +102,7 @@ public nonisolated struct MainLineMoveSnapshot: Sendable {
     public let clockSeconds: TimeInterval?
 }
 
-public nonisolated struct ParsedMainLine: Sendable {
+public struct ParsedMainLine: Sendable {
     public let startPosition: Position
     public let moves: [MainLineMoveSnapshot]
     public let diagnostics: [PGNDiagnostic]
@@ -118,13 +118,13 @@ public nonisolated struct ParsedMainLine: Sendable {
 
 public enum PGNParser {
 
-    public nonisolated static func parse(_ pgn: String) -> [PGNGame] {
+    public static func parse(_ pgn: String) -> [PGNGame] {
         parse(pgn, maximumMoveTextBytes: 8 * 1024 * 1024)
     }
 
     /// Internal limit seam keeps oversized-input behavior directly testable
     /// without allocating multi-megabyte fixtures in the package test suite.
-    nonisolated static func parse(
+    static func parse(
         _ pgn: String,
         maximumMoveTextBytes: Int
     ) -> [PGNGame] {
@@ -203,7 +203,7 @@ public enum PGNParser {
         return games
     }
 
-    public nonisolated static func tokenize(_ moveText: String) -> [PGNToken] {
+    public static func tokenize(_ moveText: String) -> [PGNToken] {
         var tokens: [PGNToken] = []
         var i = moveText.startIndex
 
@@ -248,7 +248,7 @@ public enum PGNParser {
         return tokens
     }
 
-    public nonisolated static func flatMoves(from tokens: [PGNToken]) -> [String] {
+    public static func flatMoves(from tokens: [PGNToken]) -> [String] {
         var moves: [String] = []
         var depth = 0
         for token in tokens {
@@ -262,7 +262,7 @@ public enum PGNParser {
         return moves
     }
 
-    public nonisolated static func parseMove(_ san: String, in position: Position) -> Move? {
+    public static func parseMove(_ san: String, in position: Position) -> Move? {
         parseMove(san, in: position, legalMoves: MoveGenerator.legalMoves(for: position))
     }
 
@@ -270,7 +270,7 @@ public enum PGNParser {
     /// already generated the list (e.g. for `algebraicNotation`) does not
     /// regenerate it. Identical result to `parseMove(_:in:)`, which delegates
     /// here with a freshly generated list.
-    public nonisolated static func parseMove(_ san: String, in position: Position, legalMoves: [Move]) -> Move? {
+    public static func parseMove(_ san: String, in position: Position, legalMoves: [Move]) -> Move? {
         let cleaned = String(san.filter { $0 != "+" && $0 != "#" && $0 != "!" && $0 != "?" })
             .trimmingCharacters(in: .whitespaces)
 
@@ -387,18 +387,18 @@ public enum PGNParser {
     /// Pass `pliesLimit` to stop collecting moves after N plies (useful
     /// for opening-prefix-only consumers — avoids paying the full
     /// parse cost for long games). Defaults to `Int.max` so existing
-    /// callers see identical behaviour. (bounded-perf 2026-07-01)
+    /// callers see identical behavior. (bounded-perf 2026-07-01)
     /// (dedup 2026-06-17)
     /// Resolve the starting position shared by snapshot and live-tree PGN
     /// materialization. `nil` means a non-empty FEN tag was invalid.
-    nonisolated static func startingPosition(for pgnGame: PGNGame) -> Position? {
+    static func startingPosition(for pgnGame: PGNGame) -> Position? {
         guard let fen = pgnGame.tags["FEN"], !fen.isEmpty else {
             return Position.initial()
         }
         return Position(fen: fen)
     }
 
-    public nonisolated static func mainLineSnapshot(
+    public static func mainLineSnapshot(
         fromMoveText moveText: String,
         pliesLimit: Int = Int.max
     ) -> ParsedMainLine {
@@ -407,7 +407,7 @@ public enum PGNParser {
         return parseMainLineSnapshot(from: pgnGame, pliesLimit: pliesLimit)
     }
 
-    public nonisolated static func parseMainLineSnapshot(
+    public static func parseMainLineSnapshot(
         from pgnGame: PGNGame,
         pliesLimit: Int = Int.max
     ) -> ParsedMainLine {
@@ -539,7 +539,7 @@ public enum PGNParser {
         pattern: #"\[%clk\s+(\d+):(\d{2}):(\d{2}(?:\.\d+)?)\]"#
     )
 
-    public nonisolated static func parseEngineComment(_ text: String) -> (eval: String?, bestMove: String?, comment: String?, clockSeconds: TimeInterval?) {
+    public static func parseEngineComment(_ text: String) -> (eval: String?, bestMove: String?, comment: String?, clockSeconds: TimeInterval?) {
         var remaining = text
         var clockSeconds: TimeInterval?
 
@@ -547,7 +547,7 @@ public enum PGNParser {
         // broadcast/Lichess PGNs, never in engine eval / `; best` annotations.
         // `contains` is a cheap necessary condition for the regex to match, so
         // skipping it avoids compiling + scanning the regular expression on
-        // every move comment during a full-library replay. Behaviour is
+        // every move comment during a full-library replay. Behavior is
         // identical — when the literal is absent the regex cannot match.
         if remaining.contains("[%clk") {
             let ns = remaining as NSString
@@ -595,7 +595,7 @@ public enum PGNParser {
 
     // Internal (not private) so the companion `PGN.swift` file's
     // `loadGame` path can reuse it without duplicating the table.
-    public nonisolated static func pieceTypeFromChar(_ char: Character) -> PieceType? {
+    public static func pieceTypeFromChar(_ char: Character) -> PieceType? {
         switch char {
         case "K": .king
         case "Q": .queen
@@ -606,7 +606,7 @@ public enum PGNParser {
         }
     }
 
-    nonisolated private static func parseTag(_ line: String) -> (String, String)? {
+    private static func parseTag(_ line: String) -> (String, String)? {
         // A well-formed PGN tag is `[Key "value"]`. Reject anything that
         // can't possibly satisfy that shape before chopping brackets, so
         // truncated inputs like `[` or `[]` don't crash `removeFirst` /
@@ -658,17 +658,17 @@ public enum PGNParser {
         return (key, value)
     }
 
-    nonisolated private static func extractResult(from text: String) -> String? {
+    private static func extractResult(from text: String) -> String? {
         let results = ["1-0", "0-1", "1/2-1/2", "*"]
         let tokens = text.split(separator: " ").map(String.init)
         return tokens.last(where: { results.contains($0) })
     }
 
-    nonisolated private static func isResult(_ token: String) -> Bool {
+    private static func isResult(_ token: String) -> Bool {
         ["1-0", "0-1", "1/2-1/2", "*"].contains(token)
     }
 
-    nonisolated private static func stripMoveNumberPrefix(_ word: String) -> String {
+    private static func stripMoveNumberPrefix(_ word: String) -> String {
         var idx = word.startIndex
         while idx < word.endIndex && word[idx].isNumber {
             idx = word.index(after: idx)
@@ -692,7 +692,7 @@ public enum PGNParser {
 
 public enum PGNExporter {
 
-    public nonisolated static func tokenText(from pgnGame: PGNGame) -> String {
+    public static func tokenText(from pgnGame: PGNGame) -> String {
         if !pgnGame.moveTokens.isEmpty {
             return pgnGame.moveTokens.map { token in
                 switch token {

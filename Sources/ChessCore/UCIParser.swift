@@ -7,7 +7,7 @@ import Foundation
 // `UCIOutputParser.swift`; everything here is engine-agnostic and reusable by
 // PGN, annotation, and command-line consumers.
 
-public nonisolated enum UCIParser {
+public enum UCIParser {
     public static func uciToMove(_ uci: String, in position: Position) -> Move? {
         uciToMove(uci, in: MoveGenerator.legalMoves(for: position))
     }

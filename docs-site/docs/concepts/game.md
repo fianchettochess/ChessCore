@@ -265,5 +265,5 @@ for a full walkthrough. The key entry points:
 | `Game.loadPGN(_ pgn: String) -> Bool` | Load into the receiver in-place |
 | `Game.loadPGNGame(_ pgnGame: PGNGame) -> Bool` | Load from a `PGNGame` in-place |
 
-`SetUp`/`FEN` tags are honoured: a PGN that starts from a non-initial position
+`SetUp`/`FEN` tags are honored: a PGN that starts from a non-initial position
 will seed the `Game` from the tag's FEN before replaying moves.

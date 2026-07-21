@@ -7,7 +7,7 @@ import Foundation
 /// namespace, and defensive PGN exporters may intentionally truncate hostile
 /// variation depth. This snapshot keeps authored node fields distinct and uses
 /// parent indexes so encoding and decoding do not recurse through the tree.
-public nonisolated struct GameTreeSnapshot: Codable, Equatable, Sendable {
+public struct GameTreeSnapshot: Codable, Equatable, Sendable {
     public static let currentSchemaVersion = 2
     /// Practical defense against tiny-object amplification during JSON decode.
     public static let maximumLoadedTagPairs = 4_096
@@ -23,7 +23,7 @@ public nonisolated struct GameTreeSnapshot: Codable, Equatable, Sendable {
 
     /// One ordered PGN tag pair. An array is used instead of a JSON object so
     /// the model's exact tag insertion order survives every encoder.
-    public nonisolated struct Tag: Codable, Equatable, Sendable {
+    public struct Tag: Codable, Equatable, Sendable {
         public let key: String
         public let value: String
 
@@ -33,7 +33,7 @@ public nonisolated struct GameTreeSnapshot: Codable, Equatable, Sendable {
         }
     }
 
-    public nonisolated struct Node: Codable, Equatable, Sendable {
+    public struct Node: Codable, Equatable, Sendable {
         public let parentIndex: Int?
         public let moveUCI: String
         public let annotationRawValue: String?
@@ -429,7 +429,7 @@ public nonisolated struct GameTreeSnapshot: Codable, Equatable, Sendable {
     }
 }
 
-public nonisolated enum GameTreeSnapshotError: Error, Equatable, Sendable {
+public enum GameTreeSnapshotError: Error, Equatable, Sendable {
     case unsupportedSchemaVersion(Int)
     case invalidNodeLimit(Int)
     case nodeLimitExceeded(maximumNodes: Int)
