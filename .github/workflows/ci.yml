@@ -4,18 +4,13 @@ name: CI
 # (GitHub-hosted ubuntu-latest).  The full perft oracle runs under the
 # release configuration on Linux.
 #
-# GATED OFF — auto-triggers are commented out below.  Nothing runs on
-# push or pull_request until you opt in.  To run immediately:
+# MANUAL-ONLY because this workflow includes a persistent self-hosted runner.
+# Public pull requests and routine pushes run in ci-linux.yml on ephemeral
+# GitHub-hosted runners. To run the trusted macOS + Linux matrix:
 #   GitHub → Actions → CI → "Run workflow"
-#
-# To enable on-branch CI uncomment the push / pull_request block below.
 
 on:
   workflow_dispatch:
-  # Uncomment to enable on-branch CI:
-  # push:
-  #   branches: [main]
-  # pull_request:
 
 permissions:
   contents: read
@@ -28,6 +23,9 @@ concurrency:
 jobs:
   macos-self-hosted:
     name: macOS — self-hosted (Intel Mac Pro)
+    # SECURITY: Before public visibility, restrict the organization runner
+    # group to fianchettochess/ChessCore/.github/workflows/ci.yml@refs/heads/main.
+    # These generic labels route jobs; they are not an authorization boundary.
     # Runs on the owner's Intel Mac Pro registered as a self-hosted runner.
     # x86_64 host — ChessCore is pure Swift so there are no arch-specific
     # build flags; universal-binary concerns are only relevant to the
