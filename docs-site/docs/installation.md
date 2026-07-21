@@ -26,7 +26,7 @@ while those seams live in this module.
 ```swift
 // Package.swift
 dependencies: [
-    .package(url: "https://github.com/fianchettochess/ChessCore", from: "0.7.1"),
+    .package(url: "https://github.com/fianchettochess/ChessCore.git", from: "0.7.2"),
 ],
 targets: [
     .target(
@@ -61,9 +61,10 @@ import ChessCore
 
 ## Building the API documentation
 
-ChessCore ships a DocC catalog and depends on the
-[swift-docc-plugin](https://github.com/swiftlang/swift-docc-plugin) for
-generation:
+ChessCore ships a DocC catalog and declares the
+[swift-docc-plugin](https://github.com/swiftlang/swift-docc-plugin), which adds
+the documentation command below. SwiftPM resolves the plugin package, but it is
+not linked into the ChessCore library product.
 
 ```bash
 swift package generate-documentation --target ChessCore

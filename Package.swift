@@ -32,9 +32,9 @@ let package = Package(
     products: [
         .library(name: "ChessCore", targets: ["ChessCore"]),
     ],
-    // DocC generation only — the swift-docc-plugin is a build-tool/command plugin
-    // and adds NOTHING to the library's own dependency graph or its compiled
-    // output. Consumers of ChessCore never see it.
+    // The command plugin provides `swift package generate-documentation`. It is
+    // resolved and downloaded with the package, but is not linked into the
+    // ChessCore library product.
     dependencies: [
         .package(url: "https://github.com/swiftlang/swift-docc-plugin", from: "1.0.0"),
     ],
@@ -46,8 +46,6 @@ let package = Package(
         .executableTarget(name: "ChessCoreBench", dependencies: ["ChessCore"], path: "Sources/ChessCoreBench"),
         .testTarget(name: "ChessCoreTests", dependencies: ["ChessCore"], path: "Tests/ChessCoreTests"),
     ],
-    // Swift 6 only. Carved files come from the app's Swift-5 target, so each is
-    // made Swift 6-clean as it lands (e.g. DebouncedWriter's deinit became an
-    // `isolated deinit` to satisfy strict concurrency).
+    // Compile public sources in Swift 6 language mode with strict concurrency.
     swiftLanguageModes: [.v6]
 )

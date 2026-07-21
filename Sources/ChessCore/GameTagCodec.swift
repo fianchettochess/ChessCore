@@ -19,9 +19,8 @@ public nonisolated enum GameTagCodec {
     /// so an unescaped literal backslash either swallows the
     /// following character (`a\b` decoded to `ab`) or — for a value
     /// ending in `\` — escapes the pair separator and merges two
-    /// tags into one. Real inputs hit this: PGN `\"` escapes,
-    /// Windows paths, TagEditorSheet free text. (V1-REVIEW follow-up
-    /// 2026-06-10 §1 758d33c.)
+    /// tags into one. Real inputs include PGN `\"` escapes, Windows paths,
+    /// and free-text tag values.
     public static func encode(_ tags: PGNGame.OrderedTags) -> String {
         let pairs = tags.orderedKeys.compactMap { key -> String? in
             guard let value = tags[key] else { return nil }
@@ -85,7 +84,6 @@ public nonisolated enum GameTagCodec {
                 // unescape. Consuming the backslash here unescaped
                 // twice: "\\;" inside a value lost its backslash and
                 // pass 2 swallowed the following character.
-                // (V1-REVIEW follow-up 2026-06-10 §1 758d33c)
                 current.append("\\")
                 current.append(ch)
                 escaped = false

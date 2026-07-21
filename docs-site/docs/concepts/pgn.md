@@ -94,8 +94,9 @@ if let move = PGNParser.parseMove("e4", in: position) {
 }
 ```
 
-`parseMove` handles castling (`O-O` / `0-0`), promotion (`=Q`), disambiguation,
-and captures, and defaults an ambiguous promotion to a queen.
+`parseMove` handles castling (`O-O` / `0-0`), promotion (`=Q` and the lenient
+`Q` suffix), disambiguation, and captures. A promotion suffix is required;
+omitting it does not silently choose a queen.
 
 ## Write PGN
 

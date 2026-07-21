@@ -13,9 +13,10 @@ name: Release
 # workflow_dispatch (with a `version` input naming an EXISTING tag) re-runs it
 # if a Release needs to be (re)created for a tag that is already pushed.
 #
-# Idempotent: if the Release already exists the job is a clean no-op, so a
-# re-pushed tag or a manual re-dispatch never collides (the failure mode that a
-# manual `gh release create` racing this workflow would otherwise cause).
+# Before publishing, the workflow checks out the exact tag and runs the full
+# release test suite (including every depth in the perft oracle) on the minimum
+# supported Swift version. The publish job never checks out or executes package
+# code with its write token.
 
 on:
   push:
@@ -28,31 +29,80 @@ on:
         required: true
         type: string
 
-permissions:
-  contents: write
-
 jobs:
-  release:
-    # No binary to build, so the cheap GitHub-hosted Linux runner is enough —
-    # the job only calls the GitHub Releases API.
+  verify:
+    name: Verify release tag
     runs-on: ubuntu-latest
+    container: swift:6.0
+    permissions:
+      contents: read
+    timeout-minutes: 30
+    outputs:
+      version: ${{ steps.metadata.outputs.version }}
+      commit: ${{ steps.metadata.outputs.commit }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Checkout exact tag
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: ${{ github.event.inputs.version || github.ref_name }}
           fetch-depth: 0
 
-      - name: Publish release
+      - name: Validate tag and checkout
+        id: metadata
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ github.event.inputs.version || github.ref_name }}
         run: |
           set -euo pipefail
-          if gh release view "$VERSION" >/dev/null 2>&1; then
+          if [[ ! "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "invalid release version: $VERSION (expected N.N.N without leading zeros)" >&2
+            exit 1
+          fi
+          if ! git show-ref --verify --quiet "refs/tags/$VERSION"; then
+            echo "release version is not an existing tag: $VERSION" >&2
+            exit 1
+          fi
+          tag_commit="$(git rev-list -n 1 "refs/tags/$VERSION")"
+          checkout_commit="$(git rev-parse HEAD)"
+          if [[ "$checkout_commit" != "$tag_commit" ]]; then
+            echo "checkout $checkout_commit does not match tag $VERSION ($tag_commit)" >&2
+            exit 1
+          fi
+          printf 'version=%s\n' "$VERSION" >> "$GITHUB_OUTPUT"
+          printf 'commit=%s\n' "$tag_commit" >> "$GITHUB_OUTPUT"
+
+      - name: Build release configuration
+        run: swift build -c release
+
+      - name: Test release configuration and full perft oracle
+        run: swift test -c release
+
+  release:
+    name: Publish GitHub release
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    timeout-minutes: 10
+    steps:
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.verify.outputs.version }}
+          EXPECTED_SHA: ${{ needs.verify.outputs.commit }}
+        run: |
+          set -euo pipefail
+          current_sha="$(gh api "repos/$GH_REPO/commits/$VERSION" --jq '.sha')"
+          if [[ "$current_sha" != "$EXPECTED_SHA" ]]; then
+            echo "tag $VERSION moved after verification ($EXPECTED_SHA -> $current_sha)" >&2
+            exit 1
+          fi
+          if gh release view "$VERSION" --repo "$GH_REPO" >/dev/null 2>&1; then
             echo "release $VERSION already exists — nothing to do"
             exit 0
           fi
           gh release create "$VERSION" \
+            --repo "$GH_REPO" \
             --title "ChessCore $VERSION" \
             --verify-tag \
             --generate-notes
