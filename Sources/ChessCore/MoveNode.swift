@@ -18,7 +18,7 @@ public final class MoveNode: Identifiable {
     /// CSPRNG call on that path — measurable on Linux/Android, where `UUID()`
     /// is a `getrandom` syscall rather than Darwin's cheap arc4random. Once
     /// read the value is cached, so identity stays stable for the node's
-    /// lifetime (SwiftUI diffing, the `gameState` cache key). (B7)
+    /// lifetime (SwiftUI diffing, the `gameState` cache key).
     public var id: UUID {
         if let cached = _id { return cached }
         let u = UUID()
@@ -84,7 +84,7 @@ public final class MoveNode: Identifiable {
 
     /// `positionBefore.repetitionKey`, computed once. `positionBefore` is a
     /// `let`, so the cached key never goes stale; the threefold-repetition walk
-    /// reuses it across the many game-state checks a game accrues. (B1)
+    /// reuses it across the many game-state checks a game accrues.
     var repetitionKey: String {
         if let cached = _repetitionKey { return cached }
         let key = positionBefore.repetitionKey

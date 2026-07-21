@@ -28,6 +28,9 @@ top of it, keeping the core small, portable, and free of presentation concerns.
   suite with exact node counts (initial `perft(5)` = 4,865,609; Kiwipete
   `perft(4)` = 4,085,603; plus en-passant, promotion, and castling-rights
   positions).
+- **Depth-aware UCI parsing.** `UCIOutputParser` parses engine output and
+  aggregates MultiPV lines by rank, retaining the deepest result regardless of
+  arrival order and using the latest line to break equal-depth ties.
 
 ## Contents
 
@@ -38,7 +41,7 @@ top of it, keeping the core small, portable, and free of presentation concerns.
 | Game tree | `Game`, `MoveNode`, `GameTreeSnapshot` |
 | FEN | `Position(fen:)`, `Position.fen`, `positionKey`, `stockfishSafeFEN` |
 | Notation and PGN | `UCIParser` (SAN/UCI), `PGNParser`, `PGNExporter`, `PGNGame`, `GameTagCodec` |
-| Engine interface | `ChessEngine`, `UCIEngine`, `EngineAnalysis`, `UCIOutputParser`, `UCIInfo`, `EngineError` |
+| Engine interface | `ChessEngine`, `UCIEngine`, `EngineAnalysis`, `UCIOutputParser`, `UCIInfo`, `EngineError`; depth-aware MultiPV aggregation |
 
 The `ChessEngine` and `UCIEngine` protocols and the `EngineAnalysis` types
 define an engine interface independent of any concrete engine. Conforming types may wrap
@@ -47,10 +50,10 @@ network engine.
 
 ## Installation
 
-Add the package with Swift Package Manager:
+Add ChessCore to your package dependencies:
 
 ```swift
-.package(url: "https://github.com/fianchettochess/ChessCore.git", from: "0.7.1")
+.package(url: "https://github.com/fianchettochess/ChessCore.git", from: "0.7.2")
 ```
 
 Then add `"ChessCore"` to the dependencies of any target that uses it.
@@ -91,11 +94,25 @@ swift test -c release
 Cross-compiling for Android from a macOS host requires a Swift toolchain
 matching the Swift Android SDK and the NDK's `llvm-ar` as the librarian.
 
+## Releasing
+
+ChessCore follows semantic versioning. From a clean, tested `main`, create and
+push a new annotated `N.N.N` tag. The release workflow checks out that exact
+tag, runs the release build and full test suite—including the complete perft
+oracle—and then publishes the corresponding GitHub Release. Published tags are
+never moved or re-cut.
+
 ## Documentation
 
 - API reference (DocC): `Sources/ChessCore/ChessCore.docc`. Generate it with
   `swift package generate-documentation --target ChessCore`.
 - Guide (Material for MkDocs): `docs-site/`.
+
+## Contributing and security
+
+Focused pull requests with tests for behavior changes are welcome. Report
+security issues using the private process in [SECURITY.md](SECURITY.md), not a
+public issue containing sensitive details.
 
 ## License
 

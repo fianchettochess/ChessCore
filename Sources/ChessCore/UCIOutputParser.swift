@@ -2,15 +2,13 @@ import Foundation
 
 // MARK: - UCI `info` / `bestmove` payload
 
-/// A structured snapshot of a single UCI `info` line — the ONE canonical UCI
-/// type for the whole codebase. The iOS app, the Android (Skip) port, and
-/// FianchettoKit's kernels all use it; FianchettoKit re-exports it as
-/// `UCIInfoLine` and its parser as `UCIInfoParser` for source compatibility.
+/// A structured snapshot of a single UCI `info` line.
 ///
-/// Storage is the kernel/Android shape (`scoreCp` + `mateIn` optionals); the
-/// `.score` `Score`-enum view is provided (get+set) for the iOS API. Scores are
-/// engine-POV (positive = good for the side to move) until normalized to
-/// White-POV via `whitePovCp(_:sideToMoveIsWhite:)` / `whitePovMate(_:…)`.
+/// Centipawn and mate scores are stored separately, while ``score`` provides a
+/// unified enum view. Scores are engine-POV (positive = good for the side to
+/// move) until normalized to White-POV via
+/// ``whitePovCp(_:sideToMoveIsWhite:)`` or
+/// ``whitePovMate(_:sideToMoveIsWhite:)``.
 public nonisolated struct UCIInfo: Sendable, Equatable {
     /// Depth completed by the engine for this line.
     public var depth: Int?
@@ -42,11 +40,10 @@ public nonisolated struct UCIInfo: Sendable, Equatable {
         self.pv = pv
     }
 
-    // MARK: - Score-enum view (iOS API)
+    // MARK: - Unified score view
 
     /// The score as a unified `.cp`/`.mate` enum. Getter derives it from
-    /// `scoreCp`/`mateIn`; setter writes them back. Lets the iOS call sites
-    /// keep using `info.score` while storage stays the kernel shape.
+    /// `scoreCp`/`mateIn`; the setter writes them back to the same storage.
     public var score: Score {
         get {
             if let m = mateIn { return .mate(m) }
@@ -60,7 +57,7 @@ public nonisolated struct UCIInfo: Sendable, Equatable {
         }
     }
 
-    /// iOS spelling of `multipv` (defaults to 1 when absent).
+    /// Convenience spelling of `multipv` that defaults to 1 when absent.
     public var multiPV: Int {
         get { multipv ?? 1 }
         set { multipv = newValue }
@@ -93,7 +90,7 @@ public nonisolated struct UCIInfo: Sendable, Equatable {
     }
 
     /// Human-readable eval string: `"+1.3"` / `"-0.2"` / `"M5"` / `"-M3"` —
-    /// one decimal place, matching the pre-existing iOS `UCIInfo.Score` format.
+    /// one decimal place for centipawn scores.
     public var displayText: String { score.displayText }
 
     // MARK: - Score
@@ -109,9 +106,8 @@ public nonisolated struct UCIInfo: Sendable, Equatable {
             }
         }
 
-        /// `"+1.3"` (one decimal) / `"M5"` / `"-M3"`. One decimal place is the
-        /// pre-existing iOS `UCIInfo.Score` precision. Integer arithmetic keeps
-        /// it SkipFoundation-safe.
+        /// `"+1.3"` (one decimal) / `"M5"` / `"-M3"`. Integer arithmetic
+        /// avoids floating-point rounding differences between platforms.
         public var displayText: String {
             switch self {
             case .cp(let cp):
@@ -138,7 +134,7 @@ public nonisolated struct UCIInfo: Sendable, Equatable {
 /// lines into `UCIInfo` values. No engine dependency, so the perf harness and
 /// any non-Stockfish consumer can use it without the C++ bridge.
 ///
-/// Resolved behaviours (folded up from the former per-platform copies):
+/// Parsing behavior:
 /// - Discards bounded (`lowerbound`/`upperbound`) scores — aspiration-window
 ///   artefacts whose true eval is only known to be above/below the number.
 /// - Does NOT require a `pv` token, so score-only probe lines still parse
@@ -156,7 +152,7 @@ public nonisolated enum UCIOutputParser {
     public static func parseInfo(_ line: String) -> UCIInfo? {
         // Keep tokens as Substrings (they share `line`'s buffer); convert to
         // String only where stored (`pv`). Drops a per-line intermediate [String]
-        // array on the engine's highest-frequency output. (C3)
+        // array on the engine's highest-frequency output.
         let tokens = line.split(separator: " ")
         guard tokens.first == "info" else { return nil }
         if line.contains("lowerbound") || line.contains("upperbound") { return nil }
@@ -196,8 +192,7 @@ public nonisolated enum UCIOutputParser {
         return result
     }
 
-    /// Alias for `parseInfo(_:)` — the name used by the FianchettoKit/Android
-    /// call sites that collapsed onto this parser.
+    /// A concise alias for ``parseInfo(_:)``.
     public static func parse(_ line: String) -> UCIInfo? { parseInfo(line) }
 
     /// Extract the move from a `bestmove <uci> [ponder <uci>]` line. Returns
@@ -210,11 +205,30 @@ public nonisolated enum UCIOutputParser {
     }
 
     /// Distil a batch of `UCIInfo` values (e.g. from a MultiPV search) into a
-    /// dictionary keyed by MultiPV rank, keeping the LAST (highest-depth) entry
-    /// per rank. Lines without a `multipv` field default to rank 1.
+    /// dictionary keyed by MultiPV rank, keeping the highest-depth entry per
+    /// rank. A later entry wins when depths are equal, and an entry without a
+    /// depth only replaces another depthless entry. Lines without a `multipv`
+    /// field default to rank 1.
     public static func bestInfoByRank(_ infos: [UCIInfo]) -> [Int: UCIInfo] {
         var best: [Int: UCIInfo] = [:]
-        for info in infos { best[info.multipv ?? 1] = info }
+        for info in infos {
+            let rank = info.multipv ?? 1
+            guard let current = best[rank] else {
+                best[rank] = info
+                continue
+            }
+
+            switch (current.depth, info.depth) {
+            case let (currentDepth?, newDepth?) where newDepth < currentDepth:
+                continue
+            case (_?, nil):
+                continue
+            default:
+                // The new entry is deeper, equally deep, or both entries have
+                // no depth. Prefer it so the most recent data wins ties.
+                best[rank] = info
+            }
+        }
         return best
     }
 }

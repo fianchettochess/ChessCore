@@ -421,6 +421,33 @@ final class NotationAndBookTests: XCTestCase {
         XCTAssertEqual(UCIOutputParser.parseBestMove("bestmove e2e4 ponder e7e5"), "e2e4")
     }
 
+    func testBestInfoByRankKeepsDeepestEntryRegardlessOfArrivalOrder() {
+        let deep = UCIInfo(depth: 18, multipv: 1, scoreCp: 35, pv: ["e2e4"])
+        let shallow = UCIInfo(depth: 12, multipv: 1, scoreCp: 10, pv: ["d2d4"])
+        let otherRank = UCIInfo(depth: 12, multipv: 2, scoreCp: -5, pv: ["g1f3"])
+
+        let byRank = UCIOutputParser.bestInfoByRank([deep, shallow, otherRank])
+
+        XCTAssertEqual(byRank[1], deep)
+        XCTAssertEqual(byRank[2], otherRank)
+    }
+
+    func testBestInfoByRankUsesLatestEntryToBreakDepthTies() {
+        let first = UCIInfo(depth: 18, multipv: 1, scoreCp: 10, pv: ["e2e4"])
+        let latest = UCIInfo(depth: 18, multipv: 1, scoreCp: 20, pv: ["d2d4"])
+
+        XCTAssertEqual(UCIOutputParser.bestInfoByRank([first, latest])[1], latest)
+    }
+
+    func testBestInfoByRankTreatsUnknownDepthAsLessSpecific() {
+        let unknown = UCIInfo(multipv: nil, scoreCp: 10, pv: ["e2e4"])
+        let known = UCIInfo(depth: 1, multipv: 1, scoreCp: 20, pv: ["d2d4"])
+        let laterUnknown = UCIInfo(multipv: 1, scoreCp: 30, pv: ["g1f3"])
+
+        XCTAssertEqual(UCIOutputParser.bestInfoByRank([unknown, known, laterUnknown])[1], known)
+        XCTAssertEqual(UCIOutputParser.bestInfoByRank([unknown, laterUnknown])[1], laterUnknown)
+    }
+
     // MARK: - FEN round-trip with en-passant target + castling rights
 
     func testFENRoundTripEnPassantAndCastling() {

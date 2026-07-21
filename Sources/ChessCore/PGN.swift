@@ -1,9 +1,8 @@
 import Foundation
 
 // `PGNParser` is split across two files. The pure tokenization /
-// snapshot path lives in `PGNTokenizer.swift` (used by stats compute,
-// the tactics extractor, the personal-book build, and the perf-harness
-// CLI). This file carries the `Game`-bound entry points (`loadGame`)
+// snapshot path lives in `PGNTokenizer.swift` for consumers that do not need
+// to materialize a live tree. This file carries the `Game`-bound entry points (`loadGame`)
 // and the exporter — anything that materialises or walks the live
 // `MoveNode` tree.
 
@@ -98,7 +97,7 @@ extension PGNParser {
                     currentPos = game.startPosition
                 }
                 // Generate the legal-move list ONCE and thread it into both the
-                // SAN parse and the canonical-notation derivation. (B2)
+                // SAN parse and the canonical-notation derivation.
                 let legal = MoveGenerator.legalMoves(for: currentPos)
                 guard let move = parseMove(cleanedSan, in: currentPos, legalMoves: legal) else { continue }
 
@@ -178,10 +177,8 @@ extension PGNParser {
 // MARK: - PGN Exporter (Game-tree part)
 //
 // The token-level `tokenText(from:)` lives in `PGNTokenizer.swift`
-// so SwiftData-only code paths (`Models/StoredGame.swift`'s encoders)
-// can reach it without depending on `Game` / `MoveNode`.
-// (V1-REVIEW follow-up 2026-06-10 §3 rec #25: stale Item.swift /
-// perf-harness references corrected)
+// so value-oriented consumers can use it without depending on `Game` or
+// `MoveNode`.
 
 extension PGNExporter {
 
@@ -237,7 +234,6 @@ extension PGNExporter {
     /// variations to depths the call stack can't handle. Past the cap
     /// we emit a balanced sentinel comment and stop descending into
     /// that branch — the rest of the document still exports cleanly.
-    /// (V1-REVIEW 2026-06-09 §3, medium)
     private static let maxVariationDepth = 64
 
     private static func writeNodes(_ children: [MoveNode], basePly: Int, into result: inout String) {
@@ -357,7 +353,7 @@ extension PGNExporter {
     /// PGN `Date` formatter, built ONCE. `DateFormatter()` sets up locale +
     /// calendar + ICU — expensive to instantiate (worse on swift-corelibs /
     /// SkipFoundation), and it was rebuilt on every export. Immutable after
-    /// configuration and used only for formatting, so sharing is safe. (C5)
+    /// configuration and used only for formatting, so sharing is safe.
     private static let pgnDateFormatter: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "yyyy.MM.dd"

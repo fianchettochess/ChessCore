@@ -98,9 +98,10 @@ let snapshot = await Task.detached(priority: .userInitiated) {
 
 ## Materialize a live move tree
 
-``PGNParser/loadGame(from:)`` builds a live ``Game`` and applies the default
-whole-tree node budget, including variations. Code that needs a specific budget
-and an explicit failure reason can use the throwing overload:
+``PGNParser``'s `loadGame(from:)` overloads build a live ``Game`` and apply the
+default whole-tree node budget, including variations. Code that needs a
+specific budget and an explicit failure reason can use
+``PGNParser/loadGame(from:maximumTreeNodes:)``:
 
 ```swift
 do {

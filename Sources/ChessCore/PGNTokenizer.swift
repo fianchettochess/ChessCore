@@ -87,8 +87,7 @@ public nonisolated enum PGNToken: Sendable {
 // MARK: - Sendable game-tree snapshots
 
 /// A `Sendable` representation of a parsed PGN mainline. Carries everything
-/// downstream consumers (tactics extractor, library import, personal-book
-/// build, etc.) actually need, without the main-actor-bound `Game` /
+/// downstream consumers need without the main-actor-bound `Game` /
 /// `MoveNode` class graph. Build this from a `Task.detached` on PGN text;
 /// hop back to main only if you need to construct a live `Game` from it.
 public nonisolated struct MainLineMoveSnapshot: Sendable {
@@ -114,8 +113,7 @@ public nonisolated struct ParsedMainLine: Sendable {
 // `PGNParser` is split across two files. This one carries the pure
 // tokenization and `Sendable`-snapshot path — used by anything that
 // works off a PGN string but doesn't need to materialise a live `Game`
-// tree (stats compute, tactics extractor, personal-book build, the
-// perf-harness CLI). The companion file `PGN.swift` keeps the
+// tree. The companion file `PGN.swift` keeps the
 // `Game`-bound `loadGame` overloads and the exporter.
 
 public enum PGNParser {
@@ -147,7 +145,7 @@ public enum PGNParser {
         // stdlib split (Substrings share the parent buffer) instead of
         // Foundation `components(separatedBy: .newlines)` (a String copy per
         // line + CharacterSet). CRLF yields one fewer empty subsequence, which
-        // the empty-line skip below absorbs. (C4)
+        // the empty-line skip below absorbs.
         for line in pgn.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
 
@@ -271,7 +269,7 @@ public enum PGNParser {
     /// SAN → Move against a PRECOMPUTED legal-move list, so a decoder that has
     /// already generated the list (e.g. for `algebraicNotation`) does not
     /// regenerate it. Identical result to `parseMove(_:in:)`, which delegates
-    /// here with a freshly generated list. (B2)
+    /// here with a freshly generated list.
     public nonisolated static func parseMove(_ san: String, in position: Position, legalMoves: [Move]) -> Move? {
         let cleaned = String(san.filter { $0 != "+" && $0 != "#" && $0 != "!" && $0 != "?" })
             .trimmingCharacters(in: .whitespaces)
@@ -334,7 +332,7 @@ public enum PGNParser {
             remaining = String(remaining.dropFirst())
         }
 
-        remaining.removeAll { $0 == "x" }  // Foundation-free (was replacingOccurrences). (C6)
+        remaining.removeAll { $0 == "x" }  // Foundation-free; avoids an intermediate string.
 
         guard remaining.count >= 2 else { return nil }
 
@@ -444,7 +442,7 @@ public enum PGNParser {
                 guard variationDepth == 0 else { continue }
                 let (cleanedSan, annotation) = MoveAnnotation.extract(from: san)
                 // Generate the legal-move list once for both the SAN parse and
-                // the canonical-notation derivation. (B2)
+                // the canonical-notation derivation.
                 let legal = MoveGenerator.legalMoves(for: position)
                 guard let move = parseMove(cleanedSan, in: position, legalMoves: legal) else {
                     // Never skip a failed main-line token and continue from the
@@ -536,7 +534,7 @@ public enum PGNParser {
     /// `range(of:options:.regularExpression)` recompiled this ICU pattern per
     /// ply. Sharing one instance across plies and threads is sound —
     /// NSRegularExpression is documented immutable + thread-safe for matching,
-    /// and is now a Sendable type, so a plain `static let` needs no annotation. (C2)
+    /// and is a Sendable type, so a plain `static let` needs no annotation.
     private static let clockRegex = try! NSRegularExpression(
         pattern: #"\[%clk\s+(\d+):(\d{2}):(\d{2}(?:\.\d+)?)\]"#
     )
@@ -689,11 +687,8 @@ public enum PGNParser {
 //
 // The `Game`/`MoveNode`-bound exporter methods (`export(game:)`,
 // `moveText(for:)`, etc.) live in `PGN.swift`. The token-level
-// serialization here is split out so it's reachable from
-// SwiftData-only code paths (`Models/StoredGame.swift`'s StoredGame /
-// PreparedGameData encoders) without dragging in the Game tree.
-// (V1-REVIEW follow-up 2026-06-10 §3 rec #25: stale Item.swift /
-// perf-harness references corrected)
+// serialization here is split out so value-oriented consumers can use it
+// without dragging in the live Game tree.
 
 public enum PGNExporter {
 

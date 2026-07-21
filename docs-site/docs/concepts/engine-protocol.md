@@ -53,12 +53,12 @@ if let info = UCIOutputParser.parseInfo(
 
 let best = UCIOutputParser.parseBestMove("bestmove e2e4 ponder e7e5")   // "e2e4"
 
-// Distil a MultiPV batch — keeps the last (highest-depth) entry per rank.
-// The result dictionary maps MultiPV index (1 = best) to the deepest UCIInfo
-// seen for that rank; lines without a multipv field count as rank 1.
+// Distil a MultiPV batch. The result maps each MultiPV index (1 = best)
+// to the deepest UCIInfo seen for that rank. Equal-depth updates prefer the
+// latest line; lines without a multipv field count as rank 1.
 let byRank: [Int: UCIInfo] = UCIOutputParser.bestInfoByRank(collectedInfos)
 
-// parse(_:) is an alias for parseInfo(_:) used by FianchettoKit call sites:
+// parse(_:) is a concise alias for parseInfo(_:):
 let info2 = UCIOutputParser.parse(line)
 ```
 

@@ -169,19 +169,19 @@ fall back to neutral placeholder tags).
 
 ## MoveNode
 
-`MoveNode` is a plain reference type — observation-framework-free so it is
-portable across ChessCore, FianchettoKit, and the Skip Android port. App layers
-wrap it with `@Observable`.
+`MoveNode` is a plain reference type with no observation-framework dependency,
+so it remains portable across Apple, Linux, and Android consumers. App layers
+can wrap it with `@Observable`.
 
 ```swift
 public final class MoveNode: Identifiable {
-    public let id: UUID
+    public var id: UUID { get }                  // generated lazily, then stable
     public let move: Move
     public let notation: String               // SAN
     public let positionBefore: Position
     public var children: [MoveNode]           // mainline first, then variations
     public weak var parent: MoveNode?
-    public var plyIndex: Int                  // 0 = White's first move
+    public var plyIndex: Int                  // zero-based, relative to this tree
 
     // Per-node data
     public var annotation: MoveAnnotation?
@@ -197,8 +197,8 @@ public final class MoveNode: Identifiable {
 ### Computed members
 
 ```swift
-node.moveNumber          // 1-based (plyIndex / 2 + 1)
-node.moverColor          // .white for even plyIndex, .black for odd
+node.moveNumber          // positionBefore.fullmoveNumber
+node.moverColor          // positionBefore.activeColor
 
 // positionAfter is lazily computed and cached on first access:
 node.positionAfter       // position after applying node.move

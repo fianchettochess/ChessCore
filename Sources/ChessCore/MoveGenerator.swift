@@ -61,7 +61,7 @@ public nonisolated enum MoveGenerator {
     public static func applyMoveUnchecked(_ position: inout Position, _ move: Move) {
         guard let piece = position[move.from] else { return }
 
-        // Defensive (C9): a castling move is only applied when OUR rook
+        // Defensive: a castling move is only applied when OUR rook
         // actually sits on the corner it implies. Generation already
         // guarantees this, but a hand-constructed / corrupted Move can reach
         // here directly — previously the castle branch below moved WHATEVER
@@ -357,7 +357,7 @@ struct BitBoard {
         // `isLegal` is a read-only make/unmake check (non-mutating), so
         // compacting `moves` while calling it is safe. `isLegal` runs exactly
         // once per pseudo move either way; this only drops the extra ~48-slot
-        // allocation per call, which perft makes millions of. (A1)
+        // allocation per call, which perft makes millions of.
         moves.removeAll { !isLegal($0) }
         return moves
     }
@@ -478,7 +478,7 @@ struct BitBoard {
             } else {
                 return false // malformed castle destination
             }
-            // Defensive (C9): fail legality outright when OUR rook is not on
+            // Defensive: fail legality outright when OUR rook is not on
             // the corner. Previously the |= below OR'd a PHANTOM rook bit
             // into the check test for hand-constructed castles that bypassed
             // generation (which does verify the rook).
