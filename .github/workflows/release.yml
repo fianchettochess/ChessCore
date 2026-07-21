@@ -51,6 +51,13 @@ jobs:
           ref: ${{ github.event.inputs.version || github.ref_name }}
           fetch-depth: 0
 
+      # The Swift container runs as a different user than the host checkout
+      # process. Trust only this exact, ephemeral Actions workspace so Git can
+      # validate the checked-out tag without weakening ownership checks more
+      # broadly.
+      - name: Trust checked-out workspace
+        run: git config --global --add safe.directory "${GITHUB_WORKSPACE}"
+
       - name: Validate tag and checkout
         id: metadata
         env:
