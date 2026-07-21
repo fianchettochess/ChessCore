@@ -35,7 +35,7 @@ jobs:
     runs-on: [self-hosted, macOS]
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # The trusted runner owns its workspace; avoid copying its account's
           # global .gitconfig into the Actions log for safe-directory setup.
@@ -56,7 +56,7 @@ jobs:
     container: swift:${{ matrix.swift }}
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Build
         run: swift build
       - name: Test
@@ -68,7 +68,7 @@ jobs:
     container: swift:6.0
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # Deep perft depths are node-budget-gated in debug builds for fast local
       # iteration; the release configuration runs the full exact-node-count oracle.
       - name: Perft (release)
