@@ -42,17 +42,24 @@ public struct UCIInfo: Sendable, Equatable {
 
     // MARK: - Unified score view
 
-    /// The score as a unified `.cp`/`.mate` enum. Getter derives it from
-    /// `scoreCp`/`mateIn`; the setter writes them back to the same storage.
-    public var score: Score {
+    /// The score as a unified `.cp`/`.mate` enum, or `nil` when this `info`
+    /// line did not report a score. Getter derives it from `scoreCp`/`mateIn`;
+    /// the setter writes it back to the same storage.
+    ///
+    /// UCI permits useful scoreless lines such as `info depth 12 pv e2e4`.
+    /// Keeping that absence explicit prevents a principal variation from being
+    /// mistaken for an equal (`cp 0`) evaluation.
+    public var score: Score? {
         get {
             if let m = mateIn { return .mate(m) }
-            return .cp(scoreCp ?? 0)
+            if let cp = scoreCp { return .cp(cp) }
+            return nil
         }
         set {
             switch newValue {
-            case .cp(let c): scoreCp = c; mateIn = nil
-            case .mate(let m): mateIn = m; scoreCp = nil
+            case .cp(let c)?: scoreCp = c; mateIn = nil
+            case .mate(let m)?: mateIn = m; scoreCp = nil
+            case nil: scoreCp = nil; mateIn = nil
             }
         }
     }
@@ -68,10 +75,10 @@ public struct UCIInfo: Sendable, Equatable {
 
     // MARK: - Derived score helpers
 
-    /// Engine-POV centipawns treating a forced mate as ±100 000.
-    public var centipawns: Int {
-        if let m = mateIn { return m > 0 ? 100_000 : -100_000 }
-        return scoreCp ?? 0
+    /// Engine-POV centipawns treating a forced mate as ±100 000, or `nil`
+    /// when the line did not report a score.
+    public var centipawns: Int? {
+        score?.centipawns
     }
 
     /// White-POV centipawn value. Flips sign when the side to move is Black.
@@ -84,14 +91,17 @@ public struct UCIInfo: Sendable, Equatable {
         sideToMoveIsWhite ? mate : -mate
     }
 
-    /// White-POV centipawns using this line's own score (mate → ±100 000).
-    public func whitePovCentipawns(sideToMoveIsWhite: Bool) -> Int {
-        UCIInfo.whitePovCp(centipawns, sideToMoveIsWhite: sideToMoveIsWhite)
+    /// White-POV centipawns using this line's own score (mate → ±100 000), or
+    /// `nil` when the line did not report a score.
+    public func whitePovCentipawns(sideToMoveIsWhite: Bool) -> Int? {
+        centipawns.map {
+            UCIInfo.whitePovCp($0, sideToMoveIsWhite: sideToMoveIsWhite)
+        }
     }
 
     /// Human-readable eval string: `"+1.3"` / `"-0.2"` / `"M5"` / `"-M3"` —
     /// one decimal place for centipawn scores.
-    public var displayText: String { score.displayText }
+    public var displayText: String? { score?.displayText }
 
     // MARK: - Score
 

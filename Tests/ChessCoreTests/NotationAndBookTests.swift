@@ -415,10 +415,57 @@ final class NotationAndBookTests: XCTestCase {
     func testUCIInfoParsing() {
         let info = UCIOutputParser.parseInfo("info depth 20 score cp 35 multipv 1 pv e2e4 e7e5")
         XCTAssertEqual(info?.depth, 20)
-        XCTAssertEqual(info?.score.centipawns, 35)
+        XCTAssertEqual(info?.score?.centipawns, 35)
         XCTAssertEqual(info?.pv, ["e2e4", "e7e5"])
         XCTAssertNil(UCIOutputParser.parseInfo("info depth 20 score cp 35 lowerbound pv e2e4"))
         XCTAssertEqual(UCIOutputParser.parseBestMove("bestmove e2e4 ponder e7e5"), "e2e4")
+    }
+
+    func testUCIInfoScorelessPVPreservesMissingEvaluation() throws {
+        let info = try XCTUnwrap(
+            UCIOutputParser.parseInfo("info depth 20 multipv 1 nodes 42 pv e2e4 e7e5")
+        )
+
+        XCTAssertEqual(info.depth, 20)
+        XCTAssertEqual(info.pv, ["e2e4", "e7e5"])
+        XCTAssertNil(info.score)
+        XCTAssertNil(info.centipawns)
+        XCTAssertNil(info.whitePovCentipawns(sideToMoveIsWhite: true))
+        XCTAssertNil(info.whitePovCentipawns(sideToMoveIsWhite: false))
+        XCTAssertNil(info.displayText)
+    }
+
+    func testUCIInfoOptionalScoreRoundTripsAndCanBeCleared() {
+        var info = UCIInfo(scoreCp: 34, pv: ["e2e4"])
+        XCTAssertEqual(info.score, .cp(34))
+
+        info.score = .mate(-3)
+        XCTAssertNil(info.scoreCp)
+        XCTAssertEqual(info.mateIn, -3)
+        XCTAssertEqual(info.centipawns, -100_000)
+
+        info.score = nil
+        XCTAssertNil(info.score)
+        XCTAssertNil(info.scoreCp)
+        XCTAssertNil(info.mateIn)
+        XCTAssertNil(info.centipawns)
+    }
+
+    func testBestInfoByRankDoesNotTurnADeeperScorelessPVIntoEquality() throws {
+        let scored = try XCTUnwrap(
+            UCIOutputParser.parseInfo("info depth 12 multipv 1 score cp 41 pv e2e4")
+        )
+        let deeperScoreless = try XCTUnwrap(
+            UCIOutputParser.parseInfo("info depth 18 multipv 1 pv d2d4")
+        )
+
+        let selected = try XCTUnwrap(
+            UCIOutputParser.bestInfoByRank([scored, deeperScoreless])[1]
+        )
+        XCTAssertEqual(selected.depth, 18)
+        XCTAssertEqual(selected.pv, ["d2d4"])
+        XCTAssertNil(selected.score)
+        XCTAssertNil(selected.centipawns)
     }
 
     func testBestInfoByRankKeepsDeepestEntryRegardlessOfArrivalOrder() {

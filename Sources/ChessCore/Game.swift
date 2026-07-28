@@ -82,6 +82,25 @@ public final class Game {
         return !rootChildren.isEmpty
     }
 
+    /// Whether the player to move may claim a draw under the fifty-move rule
+    /// in the current position.
+    ///
+    /// A hundred reversible halfmoves make a draw *claimable*; they do not end
+    /// the game automatically. At 150 halfmoves the seventy-five-move rule
+    /// ends the game automatically, so there is no longer a pending claim.
+    public var canClaimDrawByFiftyMoveRule: Bool {
+        guard position.halfmoveClock >= 100,
+              position.halfmoveClock < 150 else {
+            return false
+        }
+        switch gameState {
+        case .playing, .check:
+            return true
+        case .checkmate, .stalemate, .draw, .insufficientMaterial, .repetition:
+            return false
+        }
+    }
+
     /// Flat main line as `MoveRecord`s.
     public var moveHistory: [MoveRecord] {
         mainLine.map { MoveRecord(move: $0.move, notation: $0.notation, positionBefore: $0.positionBefore) }
@@ -123,7 +142,12 @@ public final class Game {
         if moves.isEmpty {
             return inCheck ? .checkmate : .stalemate
         }
-        if position.halfmoveClock >= 100 {
+        // FIDE 9.6.2: 75 moves by each side without a pawn move or capture is
+        // an automatic draw. The 50-move threshold is only claimable (9.3),
+        // exposed separately by `canClaimDrawByFiftyMoveRule`. Checkmate (and
+        // stalemate) takes precedence because no-legal-move states are resolved
+        // above before this automatic threshold.
+        if position.halfmoveClock >= 150 {
             return .draw
         }
         if position.hasInsufficientMaterial {
