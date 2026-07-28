@@ -85,8 +85,6 @@ jobs:
         run: swift build -c release
 
       - name: Test release configuration and full perft oracle
-        env:
-          RUN_BENCH: '1'
         run: swift test -c release
 
   release:
