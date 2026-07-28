@@ -34,3 +34,17 @@ jobs:
         run: swift build
       - name: Test
         run: swift test
+
+  complete-release-suite:
+    name: Complete release suite (Swift 6.0)
+    runs-on: ubuntu-latest
+    container: swift:6.0
+    timeout-minutes: 30
+    env:
+      # Opt the performance regression test into this release-configuration
+      # gate so no test in the package reports as skipped.
+      RUN_BENCH: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build and run every test
+        run: swift test -c release
