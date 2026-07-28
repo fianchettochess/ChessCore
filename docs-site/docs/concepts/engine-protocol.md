@@ -19,14 +19,14 @@ public struct UCIInfo: Sendable, Equatable {
     public var pv: [String]      // UCI moves
 
     // Computed API
-    public var score: Score         // derived from scoreCp / mateIn
+    public var score: Score?        // nil when no score was reported
     public var multiPV: Int         // multipv ?? 1
-    public var centipawns: Int      // mate maps to ±100_000 (engine-POV)
+    public var centipawns: Int?     // mate maps to ±100_000 (engine-POV)
     public var bestMoveUCI: String? // pv.first
-    public var displayText: String  // "+1.3", "M5", "-M3"
+    public var displayText: String? // "+1.3", "M5", "-M3"
 
     // White-POV conversion
-    public func whitePovCentipawns(sideToMoveIsWhite: Bool) -> Int
+    public func whitePovCentipawns(sideToMoveIsWhite: Bool) -> Int?
     public static func whitePovCp(_ cp: Int, sideToMoveIsWhite: Bool) -> Int
     public static func whitePovMate(_ mate: Int, sideToMoveIsWhite: Bool) -> Int
 
@@ -45,7 +45,9 @@ public struct UCIInfo: Sendable, Equatable {
 if let info = UCIOutputParser.parseInfo(
     "info depth 20 score cp 31 multipv 1 pv e2e4 e7e5 g1f3"
 ) {
-    print(info.depth, info.score.displayText)   // Optional(20)  "+0.3"
+    if let score = info.score {
+        print(info.depth, score.displayText)   // Optional(20)  "+0.3"
+    }
 
     // Render the PV in SAN:
     let san = UCIParser.convertPVToSAN(info.pv, from: position)
@@ -74,14 +76,20 @@ eval bar anchored to White you need to flip the sign for Black's lines:
 
 ```swift
 // Using the instance helper:
-let wpCp = info.whitePovCentipawns(sideToMoveIsWhite: position.activeColor == .white)
+if let wpCp = info.whitePovCentipawns(
+    sideToMoveIsWhite: position.activeColor == .white
+) {
+    updateEvaluationBar(centipawns: wpCp)
+}
 
 // Or the static helpers for a raw value you already have:
 let flipped = UCIInfo.whitePovCp(rawCp, sideToMoveIsWhite: false)     // Black to move
 let mateDist = UCIInfo.whitePovMate(rawMate, sideToMoveIsWhite: false)
 
-// displayText delegates to Score.displayText — the same "+1.3"/"M5" format:
-print(info.displayText)
+// displayText is nil on a scoreless info line:
+if let text = info.displayText {
+    print(text)
+}
 ```
 
 ## The ChessEngine protocol

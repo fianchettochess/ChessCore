@@ -26,7 +26,7 @@ while those seams live in this module.
 ```swift
 // Package.swift
 dependencies: [
-    .package(url: "https://github.com/fianchettochess/ChessCore.git", from: "0.7.2"),
+    .package(url: "https://github.com/fianchettochess/ChessCore.git", exact: "0.8.0"),
 ],
 targets: [
     .target(

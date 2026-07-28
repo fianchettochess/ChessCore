@@ -16,16 +16,19 @@ structured ``UCIInfo``.
 Despite the name it is generic to the UCI protocol — nothing depends on
 Stockfish-specific behavior.
 
-A ``UCIInfo`` carries ``UCIInfo/depth``, a ``UCIInfo/Score``,
-the ``UCIInfo/pv`` (UCI moves), and ``UCIInfo/multiPV``. The
-``UCIInfo/Score`` is either centipawns or mate-in-N and exposes
-display-ready conversions (`displayText`, `centipawns`, `negated`).
+A ``UCIInfo`` carries ``UCIInfo/depth``, an optional ``UCIInfo/Score``,
+the ``UCIInfo/pv`` (UCI moves), and ``UCIInfo/multiPV``. A reported
+``UCIInfo/Score`` is either centipawns or mate-in-N and exposes display-ready
+conversions (`displayText`, `centipawns`, `negated`). Scoreless UCI lines keep
+that value absent instead of being misrepresented as an equal evaluation.
 
 ```swift
 if let info = UCIOutputParser.parseInfo(
     "info depth 20 score cp 31 multipv 1 pv e2e4 e7e5 g1f3"
 ) {
-    print(info.depth, info.score.displayText)   // 20  "+0.31"
+    if let score = info.score {
+        print(info.depth, score.displayText)   // Optional(20)  "+0.3"
+    }
 
     // Render the PV in SAN:
     let san = UCIParser.convertPVToSAN(info.pv, from: position)
