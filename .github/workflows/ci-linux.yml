@@ -1,4 +1,4 @@
-name: ChessCore — CI (Linux push gate)
+name: ChessCore — CI (routine Linux gate)
 
 # Routine on-push gate on the free GitHub-hosted Linux runner, so every commit
 # gets fast feedback without touching the shared self-hosted Mac Pro. ChessCore
@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   linux:
-    name: ChessCore — tests (Linux, Swift ${{ matrix.swift }})
+    name: ChessCore — routine gate / tests (Linux, Swift ${{ matrix.swift }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -36,7 +36,7 @@ jobs:
         run: swift test
 
   complete-release-suite:
-    name: ChessCore — complete release suite (Linux, Swift 6.0)
+    name: ChessCore — routine gate / complete release suite (Linux, Swift 6.0)
     runs-on: ubuntu-latest
     container: swift:6.0
     timeout-minutes: 30

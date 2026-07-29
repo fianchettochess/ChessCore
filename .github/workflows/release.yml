@@ -1,4 +1,5 @@
 name: ChessCore — Release
+run-name: ChessCore release · ${{ github.event.inputs.version || github.ref_name }}
 
 # Auto-publish a GitHub Release when a version tag (N.N.N) is pushed.
 #
