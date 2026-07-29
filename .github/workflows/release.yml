@@ -1,4 +1,4 @@
-name: Release
+name: ChessCore — Release
 
 # Auto-publish a GitHub Release when a version tag (N.N.N) is pushed.
 #
@@ -35,7 +35,7 @@ defaults:
 
 jobs:
   verify:
-    name: Verify release tag
+    name: ChessCore — verify release tag
     runs-on: ubuntu-latest
     container: swift:6.0
     permissions:
@@ -90,7 +90,7 @@ jobs:
         run: swift test -c release
 
   release:
-    name: Publish GitHub release
+    name: ChessCore — publish GitHub release
     needs: verify
     runs-on: ubuntu-latest
     permissions:

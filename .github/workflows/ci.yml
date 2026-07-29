@@ -1,4 +1,4 @@
-name: CI
+name: ChessCore — CI (manual full matrix)
 
 # Build + test ChessCore on macOS (self-hosted Intel Mac Pro) and Linux
 # (GitHub-hosted ubuntu-latest).  The full perft oracle runs under the
@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   macos-self-hosted:
-    name: macOS — self-hosted (Intel Mac Pro)
+    name: ChessCore — tests (macOS, Intel self-hosted)
     # SECURITY: Before public visibility, restrict the organization runner
     # group to fianchettochess/ChessCore/.github/workflows/ci.yml@refs/heads/main.
     # These generic labels route jobs; they are not an authorization boundary.
@@ -45,7 +45,7 @@ jobs:
         run: swift test
 
   linux:
-    name: Linux — Swift ${{ matrix.swift }}
+    name: ChessCore — tests (Linux, Swift ${{ matrix.swift }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -61,7 +61,7 @@ jobs:
         run: swift test
 
   complete-release-suite:
-    name: Complete release suite (Swift 6.0)
+    name: ChessCore — complete release suite (Linux, Swift 6.0)
     runs-on: ubuntu-latest
     container: swift:6.0
     timeout-minutes: 30
