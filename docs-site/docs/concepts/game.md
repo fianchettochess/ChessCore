@@ -41,8 +41,10 @@ public final class Game {
 ```
 
 `Game` is a pure domain object — no SwiftUI, no SwiftData, no observation
-framework. App layers wrap it (with `@Observable`) and add clock, sound, and
-haptic side-effects after each `apply(_:)` call.
+framework, and no interaction state (no selected square, no pending promotion).
+Those belong to whatever drives it, so a consumer is free to layer an observable
+wrapper, a clock, or sound and haptic side-effects over `apply(_:)` without
+fighting the model for ownership.
 
 ### Navigation
 
@@ -66,7 +68,8 @@ print(game.currentMoveIndex)
 
 ```swift
 // Apply a pre-validated Move (promotion already resolved).
-// Updates tree + position; clock/sound are added by the app wrapper.
+// Updates the tree and the position, and nothing else — a clock, a sound, or
+// a haptic belongs to whatever is driving the game.
 game.apply(move)
 
 // Apply a move loaded from PGN. If the identical move already exists

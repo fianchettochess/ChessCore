@@ -85,6 +85,22 @@ before and after, the ``MoveAnnotation`` (from `!?`-style suffixes or NAGs), any
 inline comment, and engine eval / best-move / clock data extracted from the
 comment.
 
+### What a comment yields
+
+``PGNParser/parseEngineComment(_:)`` splits a `{ … }` comment into the engine
+data it carries and the prose left over. It reads the `[%key value]` command
+syntax the PGN specification reserves — `[%clk H:MM:SS]` for a clock reading and
+`[%eval …]` for an evaluation, either a signed decimal in pawns (`[%eval -1.42]`)
+or a mate distance (`[%eval #-3]`, reported as `"-M3"`) — and the dialect
+``PGNExporter/export(game:tags:)`` writes: an evaluation, then `best <SAN>`, then
+free prose, separated by semicolons (`{+0.34; best Nf3; solid}`). That dialect is
+this library's own format rather than a standard.
+
+Everything else comes back untouched as prose. An evaluation token must contain a
+digit, so the Informant symbols (`+-`, `-+`, `+/-`) survive in a reader's comment
+rather than being consumed as evaluations. A `[%eval …]` tag wins over a bare
+token in the same comment.
+
 ### Off the main actor
 
 Both ``ParsedMainLine`` and ``MainLineMoveSnapshot`` are `Sendable`, so the

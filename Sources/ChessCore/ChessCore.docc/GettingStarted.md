@@ -16,7 +16,7 @@ In your `Package.swift`:
 ```swift
 // As a remote dependency:
 dependencies: [
-    .package(url: "https://github.com/fianchettochess/ChessCore.git", exact: "0.8.0"),
+    .package(url: "https://github.com/fianchettochess/ChessCore.git", .upToNextMinor(from: "0.9.0")),
 ],
 targets: [
     .target(
@@ -27,6 +27,11 @@ targets: [
     ),
 ]
 ```
+
+ChessCore is pre-1.0, and under `0.x` the minor is the breaking position.
+Prefer `.upToNextMinor(from:)` over `from:` — SwiftPM does not special-case
+`0.x`, so `from: "0.9.0"` spans `0.9.0 ..< 1.0.0` and would accept a breaking
+`0.10.0`.
 
 Or, for a checkout sitting alongside your project, as a local path dependency:
 

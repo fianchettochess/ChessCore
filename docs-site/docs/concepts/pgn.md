@@ -74,6 +74,25 @@ Each snapshot carries the parsed `Move`, its SAN, the position before and after,
 the `MoveAnnotation` (from `!?`-style suffixes or NAGs), any inline comment, and
 engine evaluation, best-move, and clock data extracted from the comment.
 
+### What a comment yields
+
+`PGNParser.parseEngineComment(_:)` splits a `{ … }` comment into the engine data
+it carries and the prose left over. Two vocabularies are understood:
+
+- **The `[%key value]` command syntax the PGN specification reserves.** ChessCore
+  reads `[%clk H:MM:SS]` for a clock reading and `[%eval …]` for an evaluation —
+  either a signed decimal in pawns (`[%eval -1.42]`) or a mate distance
+  (`[%eval #-3]`, reported as `"-M3"`).
+- **The dialect `PGNExporter` writes** — an evaluation, then `best <SAN>`, then
+  free prose, separated by semicolons: `{+0.34; best Nf3; solid}`. That is this
+  library's own format, not a standard, and it round-trips what this library
+  exports.
+
+Everything else comes back untouched as prose. An evaluation token must contain
+a digit, so the Informant symbols (`+-`, `-+`, `+/-`) survive in a reader's
+comment rather than being consumed as evaluations. A `[%eval …]` tag wins over a
+bare token in the same comment.
+
 ### Off the main actor
 
 Both `ParsedMainLine` and `MainLineMoveSnapshot` are `Sendable`, so a large parse

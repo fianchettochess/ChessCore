@@ -26,7 +26,7 @@ while those seams live in this module.
 ```swift
 // Package.swift
 dependencies: [
-    .package(url: "https://github.com/fianchettochess/ChessCore.git", exact: "0.8.0"),
+    .package(url: "https://github.com/fianchettochess/ChessCore.git", .upToNextMinor(from: "0.9.0")),
 ],
 targets: [
     .target(
@@ -37,6 +37,17 @@ targets: [
     ),
 ]
 ```
+
+### Choosing a version requirement
+
+ChessCore is pre-1.0, and under `0.x` the minor is the breaking position: a
+`0.8.0 → 0.9.0` step may break source compatibility, a `0.7.1 → 0.7.2` step will
+not. The changelog records what changed in each.
+
+Prefer `.upToNextMinor(from:)` over `from:`. SwiftPM does not special-case `0.x`
+the way some other package managers do — `from: "0.9.0"` is shorthand for
+`.upToNextMajor(from: "0.9.0")`, which resolves `0.9.0 ..< 1.0.0` and would
+accept a breaking `0.10.0`.
 
 ### Local path dependency
 
