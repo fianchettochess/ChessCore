@@ -1,18 +1,14 @@
 import Foundation
 
-// The foundational chess model — the keystone of the ChessCore carve.
+// The foundational chess model: the value types the rest of the package is
+// written in — `PieceColor`, `PieceType`, `Piece`, `Square`, `Move`,
+// `CastlingRights`, `Position` — together with their chess, FEN and PGN logic.
 //
-// This file holds ONLY the portable value types and their chess/PGN/FEN logic.
-// The iOS presentation that was woven into these types in the app's
-// `ChessModel.swift` stays app-side and will be reattached as extensions when
-// the app is wired to ChessCore:
-//   • PieceSet / BoardTheme (SwiftUI colors + asset-catalog names)
-//   • Piece.symbol / Piece.assetName (display glyphs + iOS asset names)
-//   • MoveAnnotation.displayName / .symbolName / .displayGlyph / .color
-//   • MoveQuality.displayName / .sfSymbol / .color
-//   • GameState.displayText (localizable UI text)
-//   • MoveNode (@Observable; also depends on MoveGenerator — lands with tranche 3)
-// The Android app supplies its own (Compose) presentation over these same types.
+// Everything here is a struct or an enum, `Sendable`, and free of presentation:
+// no glyphs, no colours, no asset names, no localized text. A piece knows it is
+// a white knight; deciding what a white knight looks like, or what to call it in
+// German, belongs to whatever is drawing it. Attach those as extensions in your
+// own module — every type here is public and non-final by construction.
 
 public enum PieceColor: Equatable, Hashable, Codable, Sendable {
     case white, black
@@ -21,15 +17,14 @@ public enum PieceColor: Equatable, Hashable, Codable, Sendable {
         self == .white ? .black : .white
     }
 
-    /// Stable "white"/"black" string used as a persisted/CloudKit key
-    /// (Repertoire.color, RepertoireMove color predicates, stats maps).
-    /// Centralizes the on-disk contract that was inlined as
-    /// `color == .white ? "white" : "black"` at ~20 sites. NOTE: SwiftData
-    /// `#Predicate` bodies must keep the bare "white"/"black" literals —
-    /// they can't call this. (dedup audit 2026-06-16)
+    /// The lowercase English spelling, `"white"` or `"black"`.
+    ///
+    /// This is the form the common chess web APIs use for a player's colour, so
+    /// it is the right one to write to disk or send over a wire that has to
+    /// interoperate with them. Round-trips through ``init(persistenceKey:)``.
     public var persistenceKey: String { self == .white ? "white" : "black" }
 
-    /// Compact "w"/"b" key for terser maps (stats accumulators, cache keys).
+    /// The single-letter spelling, `"w"` or `"b"` — FEN's active-colour field.
     public var shortKey: String { self == .white ? "w" : "b" }
 
     public init?(persistenceKey: String) {
@@ -218,8 +213,20 @@ public struct MoveRecord: Sendable {
     }
 }
 
-/// Move annotation symbols (NAG-ish). Only the chess/PGN logic lives here; the
-/// display name, SF Symbol, glyph, and tint are app-side presentation.
+/// A label attached to a move.
+///
+/// Six of these are the PGN move suffixes — `!!`, `!`, `!?`, `?!`, `?`, `??` —
+/// and round-trip through PGN via ``pgnSuffix`` and ``from(nag:)``. The other
+/// four (`great`, `best`, `excellent`, `miss`) are game-review vocabulary with
+/// no suffix in the standard: ``pgnSuffix`` is `nil` for them and they survive
+/// export only inside a ``GameTreeSnapshot``.
+///
+/// Only the classification lives here. A glyph, a colour, a symbol name, or a
+/// translated label are the caller's.
+///
+/// - Note: The two groups are not interchangeable, and a future major version
+///   is likely to separate them. Match on ``pgnSuffix`` rather than on the case
+///   set if you only want what PGN defines.
 public enum MoveAnnotation: String, Equatable, Hashable, Sendable, CaseIterable {
     case brilliant = "!!"
     case great = "great"
@@ -383,10 +390,10 @@ public struct Position: Equatable, Sendable {
 
     public init?(fen: String) {
         let parts = fen.split(separator: " ", omittingEmptySubsequences: false)
-        // Accept either a complete six-field FEN or the four-field position
-        // key used by opening/repertoire storage. A five-field or overlong
-        // value is neither representation and previously produced a silently
-        // defaulted clock.
+        // Accept either a complete six-field FEN or the four-field prefix
+        // `positionKey` produces (placement, side, castling, en passant). A
+        // five-field or overlong value is neither representation, and
+        // accepting it would mean silently defaulting the clock fields.
         guard parts.count == 4 || parts.count == 6 else { return nil }
 
         self.init()
@@ -492,26 +499,36 @@ public struct Position: Equatable, Sendable {
         return pos
     }
 
-    /// FEN with metadata fields sanitised so Stockfish's strict parser
-    /// doesn't `assert(is_ok(s))` and abort the whole process on input it
-    /// considers inconsistent. We zero out:
-    ///   - Castling rights that don't match the actual placement (king on
-    ///     its home square AND the matching rook on a1/h1/a8/h8). Stockfish
-    ///     walks the board looking for the rook each side is supposedly
-    ///     able to castle with — if it isn't there, the search index runs
-    ///     off the end of the board and Stockfish aborts.
-    ///   - En-passant target that doesn't have the pawn that would have
-    ///     just moved sitting in the right square. Stockfish also asserts
-    ///     on lone-pawn-less en passant.
+    /// The FEN with its metadata fields made consistent with the piece
+    /// placement.
     ///
-    /// Use this anywhere a FEN crosses the Swift → Stockfish boundary,
-    /// instead of the raw `fen` accessor.
-    public var stockfishSafeFEN: String {
+    /// FEN lets the metadata fields contradict the board, and `Position` does
+    /// not stop you: a position can claim kingside castling rights with no
+    /// rook on h1, or an en-passant target square with no pawn that could have
+    /// just double-stepped to create it. Both are representable and both are
+    /// nonsense. This accessor zeroes out:
+    ///
+    ///   - Castling rights not backed by the placement — the king on its home
+    ///     square **and** the matching rook on a1/h1/a8/h8.
+    ///   - An en-passant target with no double-stepped pawn beside it.
+    ///
+    /// Use it wherever a FEN leaves this library for a parser you do not
+    /// control. Engines are entitled to assume the two halves of a FEN agree,
+    /// and several enforce it: Stockfish, for one, asserts (`assert(is_ok(s))`)
+    /// and aborts the whole process rather than returning an error — it walks
+    /// the board looking for the rook a side claims to be able to castle with,
+    /// and runs the search index off the end of the board when it is not
+    /// there.
+    public var consistentFEN: String {
         var sanitized = self
         sanitized.castlingRights = sanitizedCastlingRights
         sanitized.enPassantTarget = sanitizedEnPassantTarget
         return sanitized.fen
     }
+
+    @available(*, deprecated, renamed: "consistentFEN",
+               message: "Renamed: the invariant is not specific to one engine.")
+    public var stockfishSafeFEN: String { consistentFEN }
 
     private var sanitizedCastlingRights: CastlingRights {
         let whiteKing = Square(file: 4, rank: 0)
@@ -555,9 +572,8 @@ public struct Position: Equatable, Sendable {
     /// pawn can take it; that phantom target makes an otherwise-identical
     /// position reached by a transposing double push (e.g. 1.d4 e6 2.c4 d5)
     /// miss the opening entry that the canonical order (1.d4 d5 2.c4 e6 —
-    /// Queen's Gambit Declined, keyed with no EP) is stored under. Used by
-    /// the opening-book lookup's transposition fallback.
-    /// (opening transposition fix 2026-06-16)
+    /// Queen's Gambit Declined, keyed with no EP) is stored under. Key by this
+    /// rather than by the raw target wherever transpositions must collide.
     public var capturableEnPassantTarget: Square? {
         guard let target = enPassantTarget else { return nil }
         // target rank 2 (3rd rank): White double-pushed, Black to capture.

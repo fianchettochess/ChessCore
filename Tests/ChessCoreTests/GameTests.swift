@@ -126,10 +126,10 @@ final class GameTests: XCTestCase {
         XCTAssertEqual(game.gameState, .repetition)
     }
 
-    func testMoverColorAndReplayClocksForBlackToMoveFENGame() {
+    func testMoverColorAndClocksForBlackToMoveFENGame() {
         // Regression: MoveNode.moverColor used ply parity (ply 0 == .white),
         // which is wrong for FEN-setup games where Black moves first — the
-        // truth is positionBefore.activeColor. replayClockTimes routes %clk
+        // truth is positionBefore.activeColor. clockTimes routes %clk
         // by moverColor, so the first clock annotation must land on BLACK.
         let pgn = """
         [SetUp "1"]
@@ -151,14 +151,14 @@ final class GameTests: XCTestCase {
 
         // After Black's first move, only Black has a clock annotation.
         game.navigateToNode(mainLine[0])
-        let clocksAfterBlack = game.replayClockTimes
+        let clocksAfterBlack = game.clockTimes
         XCTAssertEqual(clocksAfterBlack.black, 300,
                        "the first %clk belongs to Black, the first mover")
         XCTAssertNil(clocksAfterBlack.white,
                      "White hasn't moved yet — no white clock annotation")
 
         game.navigateToNode(mainLine[1])
-        let clocksAfterWhite = game.replayClockTimes
+        let clocksAfterWhite = game.clockTimes
         XCTAssertEqual(clocksAfterWhite.black, 300)
         XCTAssertEqual(clocksAfterWhite.white, 270)
     }

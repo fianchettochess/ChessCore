@@ -375,20 +375,6 @@ public enum PGNParser {
         return nil
     }
 
-    /// Build a `Sendable` mainline snapshot from a parsed PGN game. Variations
-    /// and tags are dropped; everything else (positions, comments, engine
-    /// metadata, annotations) is carried over. This is the off-main entrypoint
-    /// for consumers that previously had to construct a full `Game` just to
-    /// walk the mainline.
-    /// Tokenize raw move text and parse its main-line snapshot in one
-    /// step — the `PGNGame() + tokenize + parseMainLineSnapshot` prelude
-    /// the tactics / endgame / stats extractors each repeated verbatim.
-    /// The per-caller minimum-move-count guard stays at the call site.
-    /// Pass `pliesLimit` to stop collecting moves after N plies (useful
-    /// for opening-prefix-only consumers — avoids paying the full
-    /// parse cost for long games). Defaults to `Int.max` so existing
-    /// callers see identical behavior. (bounded-perf 2026-07-01)
-    /// (dedup 2026-06-17)
     /// Resolve the starting position shared by snapshot and live-tree PGN
     /// materialization. `nil` means a non-empty FEN tag was invalid.
     static func startingPosition(for pgnGame: PGNGame) -> Position? {
@@ -398,6 +384,16 @@ public enum PGNParser {
         return Position(fen: fen)
     }
 
+    /// Tokenize raw move text and parse its main line in one step.
+    ///
+    /// Equivalent to building a `PGNGame`, assigning `tokenize(moveText)` to
+    /// its `moveTokens`, and calling ``parseMainLineSnapshot(from:pliesLimit:)``.
+    ///
+    /// - Parameters:
+    ///   - moveText: PGN move text, without the tag pair section.
+    ///   - pliesLimit: Stop collecting after this many plies. Useful when only
+    ///     an opening prefix is wanted, since it avoids paying the full parse
+    ///     cost of a long game. Defaults to no limit.
     public static func mainLineSnapshot(
         fromMoveText moveText: String,
         pliesLimit: Int = Int.max
@@ -407,6 +403,19 @@ public enum PGNParser {
         return parseMainLineSnapshot(from: pgnGame, pliesLimit: pliesLimit)
     }
 
+    /// Build a `Sendable` main-line snapshot from a parsed PGN game.
+    ///
+    /// Variations and tags are dropped; positions, comments, engine metadata
+    /// and annotations are carried over. Because the result is a value type,
+    /// this is the entry point for walking a game off the main actor — no
+    /// `Game` object, and none of its reference-type confinement rules.
+    ///
+    /// - Parameters:
+    ///   - pgnGame: A tokenized game. An invalid `FEN` tag fails closed: the
+    ///     snapshot comes back with no moves rather than silently reinterpreted
+    ///     against the initial position.
+    ///   - pliesLimit: Stop collecting after this many plies. Defaults to no
+    ///     limit.
     public static func parseMainLineSnapshot(
         from pgnGame: PGNGame,
         pliesLimit: Int = Int.max
@@ -529,19 +538,51 @@ public enum PGNParser {
         )
     }
 
-    /// The `[%clk H:MM:SS(.f)]` pattern, compiled ONCE. Broadcast/Lichess PGNs
-    /// carry a clock tag on every ply, so the old
-    /// `range(of:options:.regularExpression)` recompiled this ICU pattern per
-    /// ply. Sharing one instance across plies and threads is sound —
-    /// NSRegularExpression is documented immutable + thread-safe for matching,
-    /// and is a Sendable type, so a plain `static let` needs no annotation.
+    /// The `[%clk H:MM:SS(.f)]` pattern, compiled ONCE. Broadcast PGNs carry a
+    /// clock tag on every ply, and recompiling this ICU pattern per ply is
+    /// measurable on a whole-library replay. Sharing one instance across plies
+    /// and threads is sound — NSRegularExpression is documented immutable and
+    /// thread-safe for matching, and is `Sendable`, so a plain `static let`
+    /// needs no annotation.
     private static let clockRegex = try! NSRegularExpression(
         pattern: #"\[%clk\s+(\d+):(\d{2}):(\d{2}(?:\.\d+)?)\]"#
     )
 
+    /// The `[%eval …]` pattern: a signed decimal (`-1.42`) or a mate distance
+    /// (`#-3`). Same sharing rationale as `clockRegex`.
+    private static let evalRegex = try! NSRegularExpression(
+        pattern: #"\[%eval\s+(#?[-+]?\d+(?:\.\d+)?)\]"#
+    )
+
+    /// Split a PGN move comment into the engine annotations it carries and the
+    /// prose that is left over.
+    ///
+    /// Two comment vocabularies are understood.
+    ///
+    /// **The `[%key value]` command syntax the PGN specification reserves.**
+    /// ``PGNParser`` reads two of these: `[%clk H:MM:SS]` for a clock reading
+    /// and `[%eval …]` for an evaluation, which is either a signed decimal in
+    /// pawns (`[%eval -1.42]`) or a mate distance (`[%eval #-3]`). A mate
+    /// distance is reported as `"M3"` / `"-M3"`; a decimal is reported exactly
+    /// as written.
+    ///
+    /// **This library's own export format**, which
+    /// ``PGNExporter/export(game:tags:)`` writes: an evaluation, then
+    /// `best <SAN>`, then free prose, separated by semicolons —
+    /// `{+0.34; best Nf3; solid}`. It round-trips what this library exports.
+    ///
+    /// Everything a comment carries that is neither of those comes back
+    /// untouched in `comment`. In particular an evaluation token must contain a
+    /// digit, so the Informant symbols (`+-`, `-+`, `+/-`) survive as prose
+    /// rather than being read as evaluations.
+    ///
+    /// - Returns: the evaluation, the best move (SAN or UCI, as written), the
+    ///   remaining prose, and the clock reading in seconds — each `nil` when
+    ///   the comment did not carry it.
     public static func parseEngineComment(_ text: String) -> (eval: String?, bestMove: String?, comment: String?, clockSeconds: TimeInterval?) {
         var remaining = text
         var clockSeconds: TimeInterval?
+        var taggedEval: String?
 
         // Fast-path: the `[%clk ...]` clock tag appears only in imported
         // broadcast/Lichess PGNs, never in engine eval / `; best` annotations.
@@ -569,8 +610,32 @@ public enum PGNParser {
             }
         }
 
+        // The PGN-reserved `[%eval …]` command. Same `contains` fast path as
+        // the clock tag above: absent literal ⇒ the regex cannot match.
+        if remaining.contains("[%eval") {
+            let ns = remaining as NSString
+            if let match = Self.evalRegex.firstMatch(
+                in: remaining, range: NSRange(location: 0, length: ns.length)
+            ) {
+                let value = ns.substring(with: match.range(at: 1))
+                if value.hasPrefix("#") {
+                    // Mate distance. `#-3` is mate against the side to move.
+                    let distance = value.dropFirst()
+                    taggedEval = distance.hasPrefix("-")
+                        ? "-M\(distance.dropFirst())"
+                        : "M\(distance.drop(while: { $0 == "+" }))"
+                } else {
+                    taggedEval = value
+                }
+                if let r = Range(match.range, in: remaining) {
+                    remaining.removeSubrange(r)
+                    remaining = remaining.trimmingCharacters(in: .whitespaces)
+                }
+            }
+        }
+
         let parts = remaining.components(separatedBy: ";").map { $0.trimmingCharacters(in: .whitespaces) }
-        var eval: String?
+        var eval: String? = taggedEval
         var bestMove: String?
         var commentParts: [String] = []
 
@@ -578,9 +643,17 @@ public enum PGNParser {
             if part.hasPrefix("best ") {
                 bestMove = String(part.dropFirst(5))
             } else if part.hasPrefix("+") || part.hasPrefix("-") || part.hasPrefix("0") || part.hasPrefix("M") {
-                let isEval = part.allSatisfy { $0.isNumber || $0 == "." || $0 == "+" || $0 == "-" || $0 == "M" }
+                // An evaluation is made only of digits, a decimal point, a
+                // sign, and the mate marker — AND must contain a digit. Without
+                // the digit requirement the Informant symbols `+-` and `-+`
+                // satisfy the character test and are silently eaten out of the
+                // reader's prose.
+                let isEval = part.contains(where: \.isNumber)
+                    && part.allSatisfy { $0.isNumber || $0 == "." || $0 == "+" || $0 == "-" || $0 == "M" }
                 if isEval {
-                    eval = part
+                    // A `[%eval …]` tag, being the standardized spelling, wins
+                    // over a bare token in the same comment.
+                    if taggedEval == nil { eval = part }
                 } else {
                     commentParts.append(part)
                 }

@@ -60,8 +60,11 @@ public protocol ChessEngine: AnyObject {
 
 An ``EngineAnalysis`` holds the ranked ``EngineAnalysis/ScoredMove`` list, an
 optional ``EngineAnalysis/Evaluation``, and the search depth. Each
-``EngineAnalysis/ScoredMove`` carries the ``Move``, its SAN notation, a
-probability, an optional ``UCIInfo/Score``, and its PV line.
+``EngineAnalysis/ScoredMove`` carries the ``Move``, its SAN notation, an
+optional ``UCIInfo/Score``, its PV line, and — for a policy network that
+produces one — an optional probability. A search engine leaves the probability
+`nil` and ranks by score, so there is no invented value to tell apart from a
+genuine zero.
 
 > Note: ``EngineAnalysis/ScoredMove`` is `Identifiable` and its `id` is the SAN
 > notation — unique within one position's move list and stable across depth
@@ -69,23 +72,26 @@ probability, an optional ``UCIInfo/Score``, and its PV line.
 > results.
 
 The ``EngineAnalysis/Evaluation`` enum models a win/draw/loss split, centipawns,
-or mate-in-N, and renders display text via `displayText` and `scoreText`.
+or mate-in-N. It carries the engine's assessment, not a rendering of it —
+decimal places, mate spelling, and whether a win/draw/loss split becomes a
+percentage are the caller's.
 
 ## Errors
 
-``EngineError`` enumerates the failure modes — model-not-loaded, invalid input,
-prediction failure, and no-legal-moves.
+``EngineError`` enumerates the failure modes: ``EngineError/engineUnavailable``,
+``EngineError/invalidPosition``, ``EngineError/analysisFailed(_:)``, and
+``EngineError/noLegalMoves``.
 
 ## Wiring a real engine
 
 A typical ``ChessEngine`` adapter drives
 [SwiftStockfish](https://github.com/fianchettochess/SwiftStockfish): it sends
-``Position/stockfishSafeFEN``, collects `info` lines via
+``Position/consistentFEN``, collects `info` lines via
 ``UCIOutputParser/parseInfo(_:)``, and builds each
 ``EngineAnalysis/ScoredMove`` with ``UCIParser`` and
 ``MoveGenerator/algebraicNotation(for:in:legalMoves:)``.
 
-> Warning: Always send ``Position/stockfishSafeFEN`` — never the raw
+> Warning: Always send ``Position/consistentFEN`` — never the raw
 > ``Position/fen`` — across the engine boundary. See <doc:FENs>.
 
 ## See Also

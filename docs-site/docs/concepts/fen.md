@@ -20,7 +20,7 @@ king squares. It returns `nil` on malformed input.
 |---|---|---|
 | `fen` | full standard FEN, including the halfmove and fullmove counters | display, storage, round-tripping |
 | `positionKey` | FEN **without** the move counters (board + side + castling + EP) | the legality / transposition key |
-| `stockfishSafeFEN` | sanitized FEN safe for a strict UCI engine | any FEN that crosses into a UCI engine |
+| `consistentFEN` | metadata fields made consistent with the placement | any FEN leaving for a parser you don't control |
 
 ```swift
 print(position.fen)          // "...b KQkq e3 0 1"
@@ -30,12 +30,12 @@ print(position.positionKey)  // "...b KQkq e3"     (no counters)
 ## Crossing the engine boundary
 
 Stockfish's FEN parser asserts on inconsistent metadata and **aborts the
-process** (`assert(is_ok(s))`). Always hand it `stockfishSafeFEN`, which zeros out
+process** (`assert(is_ok(s))`). Always hand it `consistentFEN`, which zeros out
 castling rights that don't match the placement and drops phantom en-passant
 targets:
 
 ```swift
-engine.send("position fen \(position.stockfishSafeFEN)")
+engine.send("position fen \(position.consistentFEN)")
 engine.send("go depth 20")
 ```
 

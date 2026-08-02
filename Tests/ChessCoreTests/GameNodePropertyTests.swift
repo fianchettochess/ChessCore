@@ -2,10 +2,9 @@ import XCTest
 @testable import ChessCore
 
 /// Covers the node-property invalidation counter (`nodePropertyVersion`) and the
-/// `reconcilePath(toPlacementOf:)` pure-query extraction — both added for the
-/// app-side Game delegate-wrap. Contract: every node-property setter bumps the
-/// counter exactly once; structural edits and navigation do NOT touch it; and
-/// `reconcile` ≡ "apply every move of `reconcilePath`".
+/// `reconcilePath(toPlacementOf:)` pure query. Contract: every node-property
+/// setter bumps the counter exactly once; structural edits and navigation do NOT
+/// touch it; and `reconcile` ≡ "apply every move of `reconcilePath`".
 final class GameNodePropertyTests: XCTestCase {
 
     private func gameAfter(_ ucis: [String]) -> Game {
@@ -52,7 +51,7 @@ final class GameNodePropertyTests: XCTestCase {
         XCTAssertEqual(node.moveQuality, .excellent)
         XCTAssertEqual(node.moveAccuracy, 97.5)
 
-        game.finishAnnotationRestore()
+        game.bumpNodeProperty()
         expected += 1
         XCTAssertEqual(game.nodePropertyVersion, expected)
     }

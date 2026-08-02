@@ -2,17 +2,13 @@ import Foundation
 
 /// The transport surface of a live UCI engine: send commands, read output lines.
 ///
-/// This is deliberately minimal and engine-agnostic — it's the seam that lets the
-/// app drive more than one engine (Stockfish, Reckless, …) through one code path.
-/// Both `SwiftStockfish.StockfishEngine` and `SwiftReckless.RecklessEngine` already
-/// expose exactly this surface; the app declares their conformances (each app links
-/// the engine packages, and does so `@retroactive` since it owns neither type).
+/// Deliberately minimal and engine-agnostic, so one send-command / read-output /
+/// parse-with-`UCIOutputParser` loop drives any engine you care to plug in.
 ///
-/// It intentionally carries NO chess logic and NO construction requirement — engines
-/// are created concretely (each has its own `init?(networkDirectory:)` + net
-/// provisioning), and the app selects which to build. Everything downstream (the
-/// send-UCI / read-output / parse-with `UCIOutputParser` loop) is written once against
-/// this protocol.
+/// It carries NO chess logic and NO construction requirement. Engines are
+/// created concretely — each has its own initializer, network files and
+/// provisioning — and the consumer picks which to link and declare conforming.
+/// A conformance you do not own is declared `@retroactive`.
 ///
 /// - Note: implementations may hijack process-global stdio while live (e.g. an
 ///   in-process engine driving its UCI loop over pipes), so only ONE engine should be

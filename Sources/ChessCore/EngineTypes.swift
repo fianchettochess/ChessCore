@@ -1,5 +1,18 @@
 import Foundation
 
+/// A source of analysis for a position.
+///
+/// The seam is deliberately small: hand it a `Position`, get back an
+/// `EngineAnalysis`. A UCI process wrapper, a neural policy network, an
+/// endgame-tablebase client, and a fixed opening book can all satisfy it.
+///
+/// - Important: `ChessEngine` is a class protocol and is intentionally **not**
+///   `Sendable` — the ordinary implementation is a class with mutable search
+///   state, and requiring `Sendable` would outlaw it. Confine an engine
+///   instance to one isolation domain (an actor, or the main actor) and call
+///   `analyze` from there. `Position` and `EngineAnalysis` are both `Sendable`,
+///   so the values crossing the seam are safe to move between domains even
+///   though the engine itself is not.
 public protocol ChessEngine: AnyObject {
     var name: String { get }
     var isReady: Bool { get }
@@ -18,20 +31,33 @@ public struct EngineAnalysis: Sendable {
     }
 
     public struct ScoredMove: Identifiable, Sendable {
-        /// Stable identity across engine publishes: a fresh UUID per
-        /// publish made every list row "new" on each 10Hz analysis
-        /// update, forcing full row diff/animation churn. SAN notation
-        /// is unique within one position's move list and stable across
-        /// depth updates for the same move.
-        /// (perf/battery sweep 2026-06-11 #8b)
+        /// SAN notation, which is unique within one position's move list and
+        /// stable across depth updates for the same move.
+        ///
+        /// Identity is deliberately derived rather than generated: a fresh
+        /// `UUID` per publish would make every row of a live analysis list
+        /// "new" on each update, forcing a full diff on every engine tick.
         public var id: String { notation }
         public let move: Move
         public let notation: String
-        public let probability: Double
+        /// Likelihood this move is played, in `0...1`, when the engine is a
+        /// policy network that produces one.
+        ///
+        /// `nil` for search engines. A UCI engine ranks by evaluation and has
+        /// no probability to report, so it leaves this unset rather than
+        /// inventing a value that would be indistinguishable from a genuine
+        /// zero. Rank by `score` when this is `nil`.
+        public let probability: Double?
         public let score: UCIInfo.Score?
         public let pvLine: [String]
 
-        public init(move: Move, notation: String, probability: Double, score: UCIInfo.Score? = nil, pvLine: [String] = []) {
+        public init(
+            move: Move,
+            notation: String,
+            probability: Double? = nil,
+            score: UCIInfo.Score? = nil,
+            pvLine: [String] = []
+        ) {
             self.move = move
             self.notation = notation
             self.probability = probability
@@ -40,47 +66,30 @@ public struct EngineAnalysis: Sendable {
         }
     }
 
+    /// An engine's assessment of a position, in whichever form the engine
+    /// natively produces. Formatting it for a reader is the caller's job.
     public enum Evaluation: Equatable, Sendable {
         case winDrawLoss(win: Double, draw: Double, loss: Double)
         case centipawns(Int)
         case mate(Int)
-
-        public var displayText: String {
-            switch self {
-            case .winDrawLoss(let w, let d, let l):
-                return String(format: "W %.0f%% D %.0f%% L %.0f%%", w * 100, d * 100, l * 100)
-            case .centipawns(let cp):
-                return String(format: "%+.2f", Double(cp) / 100.0)
-            case .mate(let m):
-                return "M\(abs(m))"
-            }
-        }
-
-        public var scoreText: String {
-            switch self {
-            case .centipawns(let cp):
-                return String(format: "%+.1f", Double(cp) / 100.0)
-            case .mate(let m):
-                return "M\(abs(m))"
-            case .winDrawLoss(let w, _, let l):
-                let diff = w - l
-                return String(format: "%+.0f%%", diff * 100)
-            }
-        }
     }
 }
 
 public enum EngineError: LocalizedError {
-    case modelNotLoaded
-    case invalidInput
-    case predictionFailed(String)
+    /// No engine is loaded, or the loaded engine is not ready to analyze.
+    case engineUnavailable
+    /// The position could not be encoded into the engine's input format.
+    case invalidPosition
+    /// The engine ran but produced no usable result.
+    case analysisFailed(String)
+    /// The position has no legal moves, so there is nothing to rank.
     case noLegalMoves
 
     public var errorDescription: String? {
         switch self {
-        case .modelNotLoaded: "No engine loaded"
-        case .invalidInput: "Failed to encode position"
-        case .predictionFailed(let msg): "Prediction failed: \(msg)"
+        case .engineUnavailable: "No engine loaded"
+        case .invalidPosition: "Failed to encode position"
+        case .analysisFailed(let msg): "Analysis failed: \(msg)"
         case .noLegalMoves: "No legal moves in position"
         }
     }

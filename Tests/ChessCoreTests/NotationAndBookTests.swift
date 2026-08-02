@@ -627,40 +627,11 @@ final class NotationAndBookTests: XCTestCase {
                        "Final position must match after round-trip")
     }
 
-    // MARK: - Spoken labels (shared accessibility phrasing)
+    // MARK: - Piece names
 
-    func testPieceSpokenNames() {
+    func testPieceTypeDisplayNames() {
         XCTAssertEqual(PieceType.knight.displayName, "knight")
-        XCTAssertEqual(Piece(type: .knight, color: .white).descriptiveName, "White knight")
-        XCTAssertEqual(Piece(type: .queen, color: .black).descriptiveName, "Black queen")
-    }
-
-    func testMoveNodeSpokenLabelBlackPrefixAndAnchoring() {
-        // From a mid-game FEN where Black is to move on move 34, the spoken label
-        // must use the "..." Black prefix AND the anchored full-move number.
-        let fen = "8/8/8/4k3/8/8/4K3/7R b - - 0 34"
-        let game = Game()
-        XCTAssertTrue(game.loadFEN(fen))
-        guard let move = PGNParser.parseMove("Kd5", in: game.position) else {
-            XCTFail("Kd5 must be legal"); return
-        }
-        game.applyMoveFromPGN(move)
-        let node = game.mainLine.last!
-        XCTAssertEqual(node.spokenLabel(isCurrent: false), "34... Kd5")
-        XCTAssertEqual(node.spokenLabel(isCurrent: true), "34... Kd5, current")
-    }
-
-    func testMoveNodeSpokenLabelWhiteAndAnnotation() {
-        let game = Game()
-        guard let e4 = PGNParser.parseMove("e4", in: game.position) else {
-            XCTFail("e4 must be legal"); return
-        }
-        game.applyMoveFromPGN(e4)
-        let node = game.mainLine.last!
-        XCTAssertEqual(node.spokenLabel(isCurrent: false), "1. e4")
-        node.annotation = MoveAnnotation(rawValue: "?!")
-        if node.annotation != nil {
-            XCTAssertEqual(node.spokenLabel(isCurrent: false), "1. e4, ?!")
-        }
+        XCTAssertEqual(PieceType.queen.displayName, "queen")
+        XCTAssertEqual(PieceType.pawn.displayName, "pawn")
     }
 }

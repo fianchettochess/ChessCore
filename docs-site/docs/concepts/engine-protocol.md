@@ -118,7 +118,7 @@ public struct EngineAnalysis: Sendable {
         public var id: String { notation }   // SAN is stable across depth updates
         public let move: Move
         public let notation: String
-        public let probability: Double
+        public let probability: Double?      // policy networks only; nil for search engines
         public let score: UCIInfo.Score?
         public let pvLine: [String]
     }
@@ -127,12 +127,17 @@ public struct EngineAnalysis: Sendable {
         case winDrawLoss(win: Double, draw: Double, loss: Double)
         case centipawns(Int)
         case mate(Int)
-
-        public var displayText: String
-        public var scoreText: String
     }
 }
 ```
+
+`probability` is for engines that produce one — a policy network ranking moves
+by how likely they are to be played. A search engine leaves it `nil` and ranks
+by `score`; there is no invented value to tell apart from a genuine zero.
+
+`Evaluation` carries the engine's assessment in whichever form the engine
+natively produces. Formatting it — decimal places, mate spelling, whether a
+win/draw/loss split becomes a percentage — is the caller's.
 
 `ScoredMove.id` is the SAN notation — it is unique within one position's move
 list and stable across depth updates, so list rows keep a stable identity as the
@@ -142,9 +147,9 @@ engine publishes deeper results.
 
 ```swift
 public enum EngineError: LocalizedError {
-    case modelNotLoaded
-    case invalidInput
-    case predictionFailed(String)
+    case engineUnavailable      // no engine loaded, or not ready
+    case invalidPosition        // position could not be encoded for the engine
+    case analysisFailed(String)
     case noLegalMoves
 }
 ```
@@ -196,7 +201,7 @@ for await line in engine.output {
 ## Wiring a real engine
 
 A typical `ChessEngine` adapter drives [SwiftStockfish](https://github.com/fianchettochess/SwiftStockfish),
-sends `position.stockfishSafeFEN`, collects `info` lines via
+sends `position.consistentFEN`, collects `info` lines via
 `UCIOutputParser.parseInfo`, and constructs `ScoredMove` values with
 `UCIParser.uciToMove` and `MoveGenerator.algebraicNotation`. See the
 [Usage Examples](../examples.md) for a complete implementation.

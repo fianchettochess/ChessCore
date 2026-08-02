@@ -4,11 +4,11 @@ import Foundation
 /// navigation / PGN / FEN. A general chess game model — any board UI or analysis
 /// surface builds on it.
 ///
-/// This is the engine half of the app's `Game`. The board-interaction state
-/// (selected square, pending promotion, pre-moves), the clock, sound/haptics,
-/// and SwiftUI `@Observable` conformance live in the app's wrapper on the other
-/// side of the boundary; here `apply(_:)` performs only the tree/position
-/// mutation and the app layer adds clock/sound after it.
+/// `Game` deliberately holds no interaction or presentation state: no selected
+/// square, no pending promotion, no clock, no observation conformance. Those
+/// belong to whatever drives it. `apply(_:)` performs the tree and position
+/// mutation and nothing else, so a caller is free to layer a clock, sound, or
+/// an observable wrapper on top without fighting the model for ownership.
 ///
 /// - Important: `Game` (and the `MoveNode` tree it owns) is a reference type and
 ///   is **not** thread-safe. Some node properties are memoized lazily on first
@@ -411,12 +411,6 @@ public final class Game {
         bumpNodeProperty()
     }
 
-    /// Signal the end of a bulk annotation restore that wrote `MoveNode`
-    /// fields directly — one coalesced `nodePropertyVersion` bump.
-    public func finishAnnotationRestore() {
-        bumpNodeProperty()
-    }
-
     public func deleteFromNode(_ node: MoveNode) {
         if let parent = node.parent {
             parent.children.removeAll { $0 === node }
@@ -462,15 +456,6 @@ public final class Game {
         let games = PGNParser.parse(pgn)
         guard let first = games.first else { return false }
         return loadPGNGame(first)
-    }
-
-    /// Restore a snapshot a drill saved on entry. Empty → fresh game.
-    public func restoreDrillSnapshot(_ savedPGN: String) {
-        if savedPGN.isEmpty {
-            newGame()
-        } else {
-            _ = loadPGN(savedPGN)
-        }
     }
 
     public func loadPGNGame(_ pgnGame: PGNGame) -> Bool {

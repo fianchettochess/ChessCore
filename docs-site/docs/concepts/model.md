@@ -103,21 +103,18 @@ public struct MoveRecord: Sendable {
 }
 ```
 
-### Spoken labels
-
-`PieceType` and `Piece` carry spoken-label helpers for VoiceOver / TalkBack
-accessibility labels and human-readable piece descriptions:
+### Piece names
 
 ```swift
 PieceType.knight.displayName         // "knight"
 PieceType.queen.displayName          // "queen"
-
-let piece = Piece(type: .bishop, color: .white)
-piece.descriptiveName                // "White bishop"
 ```
 
-`displayName` is the lowercase noun; `descriptiveName` is the `"Color noun"` form
-used by accessibility square labels and physical-board correction prose.
+`displayName` is the English noun the algebraic-notation letter abbreviates, so
+it is a property of the notation rather than of a user interface. It is not
+localized: a program presenting piece names in another language should map from
+the `PieceType` case rather than from this string. Composing a phrase from it
+("White knight", a screen-reader sentence) is the caller's.
 
 ## MoveAnnotation
 
@@ -181,7 +178,7 @@ public struct Position: Equatable, Sendable {
 
     public var fen: String                   // full FEN incl. counters
     public var positionKey: String           // FEN without counters (the legality/transposition key)
-    public var stockfishSafeFEN: String      // sanitized for a strict UCI engine
+    public var consistentFEN: String      // metadata reconciled with the placement
     public var capturableEnPassantTarget: Square?  // EP only when a capture exists
     public var hasInsufficientMaterial: Bool
 }

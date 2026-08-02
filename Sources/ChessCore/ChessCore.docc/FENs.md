@@ -7,7 +7,7 @@ three FEN-shaped accessors for a given consumer.
 
 A ``Position`` round-trips through standard FEN and exposes three FEN-shaped
 accessors — ``Position/fen``, ``Position/positionKey``, and
-``Position/stockfishSafeFEN`` — each tuned for a different consumer: display and
+``Position/consistentFEN`` — each tuned for a different consumer: display and
 storage, cache and transposition keys, and a strict UCI engine, respectively.
 
 ## Parsing
@@ -27,7 +27,7 @@ king squares. It returns `nil` on malformed input.
 |---|---|---|
 | ``Position/fen`` | full standard FEN, including the halfmove and fullmove counters | display, storage, round-tripping |
 | ``Position/positionKey`` | FEN **without** the move counters (board + side + castling + EP) | the legality / transposition key |
-| ``Position/stockfishSafeFEN`` | sanitized FEN safe for a strict UCI engine | any FEN that crosses into a UCI engine |
+| ``Position/consistentFEN`` | metadata fields made consistent with the placement | any FEN leaving for a parser you don't control |
 
 ```swift
 print(position.fen)          // "...b KQkq e3 0 1"
@@ -37,16 +37,16 @@ print(position.positionKey)  // "...b KQkq e3"     (no counters)
 ## Sending a FEN to a UCI engine
 
 Stockfish's FEN parser asserts on inconsistent metadata and aborts the process
-(`assert(is_ok(s))`). ``Position/stockfishSafeFEN`` zeros out castling rights
+(`assert(is_ok(s))`). ``Position/consistentFEN`` zeros out castling rights
 that don't match the placement and drops phantom en-passant targets, so it is
 always safe to hand to a strict UCI engine.
 
-> Warning: Always send ``Position/stockfishSafeFEN`` — not ``Position/fen`` —
+> Warning: Always send ``Position/consistentFEN`` — not ``Position/fen`` —
 > when a FEN crosses into a UCI engine. A FEN with inconsistent metadata can
 > crash Stockfish's parser and take the engine process down with it.
 
 ```swift
-engine.send("position fen \(position.stockfishSafeFEN)")
+engine.send("position fen \(position.consistentFEN)")
 engine.send("go depth 20")
 ```
 

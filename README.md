@@ -40,7 +40,7 @@ top of it, keeping the core small, portable, and free of presentation concerns.
 | Board model | `Position`, `Move`, `Square`, `Piece`, `PieceColor`, `PieceType`, `CastlingRights`, `GameState`, `MoveAnnotation`, `MoveQuality` |
 | Move generation | `MoveGenerator` — legal moves, make-move (`applyMoveUnchecked`), check/attack detection, SAN (`algebraicNotation`); perft-verified (suite in `Tests/`, harness in `ChessCoreBench`) |
 | Game tree | `Game`, `MoveNode`, `GameTreeSnapshot` |
-| FEN | `Position(fen:)`, `Position.fen`, `positionKey`, `stockfishSafeFEN` |
+| FEN | `Position(fen:)`, `Position.fen`, `positionKey`, `consistentFEN` |
 | Notation and PGN | `UCIParser` (SAN/UCI), `PGNParser`, `PGNExporter`, `PGNGame`, `GameTagCodec` |
 | Engine interface | `ChessEngine`, `UCIEngine`, `EngineAnalysis`, `UCIOutputParser`, `UCIInfo`, `EngineError`; depth-aware MultiPV aggregation |
 

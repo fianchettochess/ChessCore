@@ -108,14 +108,14 @@ A ``Position`` exposes three FEN-shaped accessors, each for a distinct purpose:
 - ``Position/positionKey`` — the FEN *without* the move counters (board + side +
   castling + EP). This is the legality key and the right key for
   transposition tables.
-- ``Position/stockfishSafeFEN`` — a sanitized FEN for handing to a strict UCI
+- ``Position/consistentFEN`` — a sanitized FEN for handing to a strict UCI
   engine. Stockfish's parser asserts on inconsistent metadata and aborts the
   process; this accessor zeros out castling rights that don't match the piece
   placement and drops phantom en-passant targets.
 
 ```swift
-// ALWAYS use stockfishSafeFEN when a FEN crosses into a UCI engine:
-engine.send("position fen \(position.stockfishSafeFEN)")
+// ALWAYS use consistentFEN when a FEN leaves for a parser you don't control:
+engine.send("position fen \(position.consistentFEN)")
 engine.send("go depth 20")
 
 // Use the plain fen for storage / display:

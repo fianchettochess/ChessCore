@@ -2,10 +2,10 @@ import Foundation
 
 // MARK: - UCI move-string translation
 //
-// Pure SAN ↔ UCI translation against a Position. Stockfish-specific
-// output parsing (`info ...` lines, `bestmove ...` lines) lives in
-// `UCIOutputParser.swift`; everything here is engine-agnostic and reusable by
-// PGN, annotation, and command-line consumers.
+// Pure SAN ↔ UCI translation against a Position. Parsing an engine's output
+// stream (`info …` and `bestmove …` lines) lives in `UCIOutputParser.swift`;
+// everything here is about the move strings themselves and is equally useful
+// to PGN, annotation, and command-line consumers.
 
 public enum UCIParser {
     public static func uciToMove(_ uci: String, in position: Position) -> Move? {

@@ -103,16 +103,13 @@ func buildAnalysis(
         .compactMap { _, info -> EngineAnalysis.ScoredMove? in
             guard let firstUCI = info.pv.first,
                   let move = UCIParser.uciToMove(firstUCI, in: legal),
-                  let score = info.score,
-                  let centipawns = info.centipawns else { return nil }
+                  let score = info.score else { return nil }
             let notation = MoveGenerator.algebraicNotation(for: move, in: position, legalMoves: legal)
-            // Logistic win-probability from centipawns (engine-POV).
-            let cp = Double(min(10_000, max(-10_000, centipawns)))
-            let probability = 1.0 / (1.0 + exp(-0.00368208 * cp))
+            // `probability` is left nil: a search engine ranks by score and has
+            // no move probability to report.
             return EngineAnalysis.ScoredMove(
                 move: move,
                 notation: notation,
-                probability: probability,
                 score: score,
                 pvLine: UCIParser.convertPVToSAN(info.pv, from: position, initialLegalMoves: legal)
             )

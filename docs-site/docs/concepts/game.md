@@ -81,7 +81,6 @@ game.newGame()              // clear tree, reset to initial position
 _ = game.loadFEN(fenString) // reset to any position; returns false on bad FEN
 game.retractLastPlies(2)    // physically remove the last 2 plies from the tree
                             // (unlike undoMove, retract deletes the nodes)
-game.restoreDrillSnapshot(savedPGN)  // empty string → newGame(), else loadPGN
 ```
 
 `retractLastPlies` is the right call for a physical take-back on a sensing board:
@@ -110,9 +109,9 @@ game.clearComment(on: node)
 game.setEngineResults(on: node, bestMoveUCI: "e2e4", eval: "+0.3")
 game.setMoveQuality(.excellent, accuracy: 97.4, on: node)
 
-// After a bulk annotation restore that writes MoveNode fields directly:
-game.finishAnnotationRestore()   // coalesces to one nodePropertyVersion bump
-game.bumpNodeProperty()          // low-level version of the above
+// After a batch of writes straight to MoveNode fields, coalesce the
+// invalidation into a single bump:
+game.bumpNodeProperty()
 ```
 
 ### Change counters
@@ -232,20 +231,27 @@ for n in game.mainLine {
 let path = someVariationNode.pathFromRoot()
 ```
 
-### Spoken labels
+### PGN metadata
 
-`MoveNode` carries a spoken-label helper for VoiceOver / TalkBack move lists:
+A loaded game's tags are readable as typed values rather than raw strings:
 
 ```swift
-// isCurrent: true when this node is the one currently selected in the UI.
-let label = node.spokenLabel(isCurrent: true)
-// "14... Nf6!?, current"  (Black move with annotation, anchored to real move number)
+game.playerName(for: .white)   // String?  — the `White` tag, as written
+game.elo(for: .black)          // Int?     — `BlackElo`, nil for "?" / "0" / absent
+game.initialClockSeconds       // TimeInterval? — base time from `TimeControl`
+
+game.hasClockAnnotations       // Bool — does the game carry {[%clk ...]} values?
+game.clockTimes                // (white: TimeInterval?, black: TimeInterval?, active: PieceColor)
 ```
 
-The label uses `positionBefore.fullmoveNumber` so repertoire trees that start
-from a non-initial position announce the correct move number rather than
-restarting at 1. A `"..."` prefix distinguishes Black moves from White moves for
-screen-reader users who cannot see the column layout.
+`clockTimes` reconstructs both sides' clocks at the currently selected node from
+the `[%clk]` annotations along the path from the root, falling back to
+`initialClockSeconds` before a side's first annotated move.
+
+`initialClockSeconds` covers the `TimeControl` forms the PGN specification
+defines: sudden death (`600`), increment (`300+5`), moves-per-period
+(`40/5400`), hourglass (`*180`), and multi-period (`40/5400:1800:*60`, whose
+first period is where the clock starts). `-` and `?` yield `nil`.
 
 ---
 

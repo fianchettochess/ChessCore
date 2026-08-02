@@ -141,8 +141,8 @@ public struct UCIInfo: Sendable, Equatable {
 // MARK: - UCIOutputParser
 
 /// Pure-logic parser for UCI engine output. Converts `info …` and `bestmove …`
-/// lines into `UCIInfo` values. No engine dependency, so the perf harness and
-/// any non-Stockfish consumer can use it without the C++ bridge.
+/// lines into `UCIInfo` values. It links against no engine, so a test harness
+/// or a log reader can use it with no engine present at all.
 ///
 /// Parsing behavior:
 /// - Discards bounded (`lowerbound`/`upperbound`) scores — aspiration-window
@@ -150,9 +150,9 @@ public struct UCIInfo: Sendable, Equatable {
 /// - Does NOT require a `pv` token, so score-only probe lines still parse
 ///   (one-shot probes and terminal positions — `info depth 0 score mate 0` —
 ///   depend on this). Lines with NEITHER a score NOR a pv (`currmove`
-///   progress ticks) are rejected as noise: they have no consumer, and keyed
-///   by `multipv ?? 1` they would overwrite pv-bearing rank-1 entries in the
-///   apps' per-rank accumulators.
+///   progress ticks) are rejected as noise: they carry nothing to report, and
+///   keyed by `multipv ?? 1` they would overwrite pv-bearing rank-1 entries in
+///   a per-rank accumulator.
 /// - Parses `nps`.
 /// - `parseBestMove` treats `bestmove (none)` as `nil` (terminal position).
 public enum UCIOutputParser {

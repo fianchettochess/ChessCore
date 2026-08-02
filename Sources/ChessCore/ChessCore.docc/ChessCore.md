@@ -78,7 +78,7 @@ print(position.fen)  // "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3
 - ``Position/init(fen:)``
 - ``Position/fen``
 - ``Position/positionKey``
-- ``Position/stockfishSafeFEN``
+- ``Position/consistentFEN``
 - ``Position/capturableEnPassantTarget``
 - ``Position/hasInsufficientMaterial``
 
