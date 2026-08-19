@@ -596,6 +596,52 @@ public struct Position: Equatable, Sendable {
         return nil
     }
 
+    /// Whether `color` retains material that could deliver checkmate.
+    ///
+    /// THIS IS THE UNILATERAL QUESTION, and it is not the same one
+    /// ``hasInsufficientMaterial`` answers. That property asks whether NEITHER
+    /// side can mate — a dead position — and so returns `false` the moment any
+    /// pawn, rook or queen is on the board, whichever colour owns it. This asks
+    /// whether ONE named side could mate, which is what a flag fall needs:
+    /// FIDE 6.9 draws the game when the player who did not run out of time
+    /// cannot checkmate.
+    ///
+    /// WHICH DEFINITION, because the rulebook and every chess server disagree.
+    /// FIDE 6.9 says the opponent must be unable to mate "by any possible
+    /// series of legal moves". ANY series includes the flagged player
+    /// cooperating, so the literal test is whether a HELPMATE exists — and
+    /// under it K+N against K+P is a win on time, because the defender's own
+    /// pawn can be walked into blocking its king.
+    ///
+    /// This implements the COMMON CONVENTION instead — the one Lichess,
+    /// chess.com and most engines use: judge the would-be winner's material
+    /// alone. Chosen deliberately: it is what players arriving from those
+    /// servers expect, the literal reading needs a helpmate search rather than
+    /// a material count, and the two agree on every position anyone reaches by
+    /// accident. A reader checking this against FIDE 6.9 will find it diverges;
+    /// that divergence IS the decision and should not be "corrected" without
+    /// re-making it.
+    ///
+    /// A lone minor cannot mate. Two minors can (K+B+N mates, and while K+N+N
+    /// cannot FORCE mate, a mate position exists, which is what a material test
+    /// asks). A pawn can promote, so it counts.
+    public func hasMatingMaterial(for color: PieceColor) -> Bool {
+        var minors = 0
+        for square in board {
+            guard let piece = square, piece.color == color else { continue }
+            switch piece.type {
+            case .pawn, .rook, .queen:
+                return true
+            case .knight, .bishop:
+                minors += 1
+                if minors >= 2 { return true }
+            case .king:
+                continue
+            }
+        }
+        return false
+    }
+
     public var hasInsufficientMaterial: Bool {
         var whiteKnights = 0, whiteBishops = 0
         var blackKnights = 0, blackBishops = 0

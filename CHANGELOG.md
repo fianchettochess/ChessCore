@@ -11,6 +11,33 @@ breaking `0.10.0`.
 
 Published tags are never moved or re-cut.
 
+## [0.9.1] — 2026-08-19
+
+Additive. No source-compatibility change.
+
+### Added
+
+- `Position.hasMatingMaterial(for:)` — whether ONE named side retains material
+  that could deliver mate.
+
+  This is not the question `hasInsufficientMaterial` answers. That property asks
+  whether NEITHER side can mate (a dead position) and therefore returns `false`
+  as soon as any pawn, rook or queen is on the board, whichever colour owns it.
+  A flag fall needs the per-colour question: FIDE 6.9 draws the game when the
+  player who did NOT run out of time cannot checkmate. Without this, a player
+  holding a bare king is awarded the win when the opponent's clock expires —
+  and because a queen on the board makes the position "not dead", the bilateral
+  property never intervenes.
+
+  **Which definition.** FIDE 6.9 says the opponent must be unable to mate "by
+  any possible series of legal moves", and *any* series includes the flagged
+  player cooperating — so the literal test is whether a helpmate exists, under
+  which K+N against K+P is a win on time. This implements the common convention
+  instead (Lichess, chess.com, most engines): judge the would-be winner's
+  material alone. That choice is deliberate and documented on the property; a
+  reader comparing it with the rulebook will find it diverges, and that
+  divergence is the decision rather than a defect.
+
 ## [0.9.0] — 2026-08-01
 
 Breaking. A pre-publication pass over the public surface, removing symbols that
