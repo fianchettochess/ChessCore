@@ -13,6 +13,18 @@ import Foundation
 public enum PieceColor: Equatable, Hashable, Codable, Sendable {
     case white, black
 
+    // NOTE, AND IT DESERVES A FIX OF ITS OWN. This encodes as `{"white":{}}`
+    // (measured): Swift synthesizes Codable for a no-raw-value enum as a keyed
+    // container. `persistenceKey` below is documented as the form to "write to
+    // disk or send over a wire" and spells the same value "white". One type,
+    // two serializations, and the automatic one — which every Codable
+    // container gets — disagrees with the documented one.
+    //
+    // NOT fixed here because it is a MIGRATION, not a cleanup:
+    // `CombinationPuzzle.solver` is persisted through a BlobBackedStore, so
+    // `{"white":{}}` is on disk in real installs. Closing it means accepting
+    // both forms on decode and migrating the stored blobs.
+
     public var opposite: PieceColor {
         self == .white ? .black : .white
     }

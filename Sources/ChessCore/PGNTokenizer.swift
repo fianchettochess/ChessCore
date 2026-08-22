@@ -146,8 +146,8 @@ public enum PGNParser {
         // Foundation `components(separatedBy: .newlines)` (a String copy per
         // line + CharacterSet). CRLF yields one fewer empty subsequence, which
         // the empty-line skip below absorbs.
-        for line in pgn.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline) {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
+        for line in pgn.split(omittingEmptySubsequences: false, whereSeparator: { $0.isNewline }) {
+            let trimmed = line.trimmingCharacters(in: CharacterSet.whitespaces)
 
             if trimmed.hasPrefix("[") && trimmed.hasSuffix("]") {
                 if !moveTextLines.isEmpty || moveTextOverflow {
@@ -255,7 +255,7 @@ public enum PGNParser {
             switch token {
             case .variationStart: depth += 1
             case .variationEnd: depth = max(0, depth - 1)
-            case .move(let san) where depth == 0: moves.append(san)
+            case .move(let san): if depth == 0 { moves.append(san) }
             default: break
             }
         }
@@ -272,7 +272,7 @@ public enum PGNParser {
     /// here with a freshly generated list.
     public static func parseMove(_ san: String, in position: Position, legalMoves: [Move]) -> Move? {
         let cleaned = String(san.filter { $0 != "+" && $0 != "#" && $0 != "!" && $0 != "?" })
-            .trimmingCharacters(in: .whitespaces)
+            .trimmingCharacters(in: CharacterSet.whitespaces)
 
         if cleaned == "O-O" || cleaned == "0-0" {
             let rank = position.activeColor == .white ? 0 : 7
@@ -501,7 +501,7 @@ public enum PGNParser {
             case .comment(let text):
                 guard variationDepth == 0,
                       let lastIdx = moves.indices.last else { continue }
-                let trimmed = text.trimmingCharacters(in: .whitespaces)
+                let trimmed = text.trimmingCharacters(in: CharacterSet.whitespaces)
                 guard !trimmed.isEmpty else { continue }
                 let parsed = parseEngineComment(trimmed)
                 let prev = moves[lastIdx]
@@ -605,7 +605,7 @@ public enum PGNParser {
                 }
                 if let r = Range(match.range, in: remaining) {
                     remaining.removeSubrange(r)
-                    remaining = remaining.trimmingCharacters(in: .whitespaces)
+                    remaining = remaining.trimmingCharacters(in: CharacterSet.whitespaces)
                 }
             }
         }
@@ -629,12 +629,12 @@ public enum PGNParser {
                 }
                 if let r = Range(match.range, in: remaining) {
                     remaining.removeSubrange(r)
-                    remaining = remaining.trimmingCharacters(in: .whitespaces)
+                    remaining = remaining.trimmingCharacters(in: CharacterSet.whitespaces)
                 }
             }
         }
 
-        let parts = remaining.components(separatedBy: ";").map { $0.trimmingCharacters(in: .whitespaces) }
+        let parts = remaining.components(separatedBy: ";").map { $0.trimmingCharacters(in: CharacterSet.whitespaces) }
         var eval: String? = taggedEval
         var bestMove: String?
         var commentParts: [String] = []
@@ -648,7 +648,7 @@ public enum PGNParser {
                 // the digit requirement the Informant symbols `+-` and `-+`
                 // satisfy the character test and are silently eaten out of the
                 // reader's prose.
-                let isEval = part.contains(where: \.isNumber)
+                let isEval = part.contains(where: { $0.isNumber })
                     && part.allSatisfy { $0.isNumber || $0 == "." || $0 == "+" || $0 == "-" || $0 == "M" }
                 if isEval {
                     // A `[%eval …]` tag, being the standardized spelling, wins
@@ -688,7 +688,7 @@ public enum PGNParser {
         var content = line
         content.removeFirst() // [
         content.removeLast()  // ]
-        content = content.trimmingCharacters(in: .whitespaces)
+        content = content.trimmingCharacters(in: CharacterSet.whitespaces)
 
         // §8.1 string token: the value starts after the first quote and ends
         // at the first UNESCAPED quote that follows — NOT the last quote on
@@ -727,7 +727,7 @@ public enum PGNParser {
         // old two-quote requirement gave unterminated values).
         guard closed else { return nil }
 
-        let key = content[content.startIndex..<quoteStart].trimmingCharacters(in: .whitespaces)
+        let key = content[content.startIndex..<quoteStart].trimmingCharacters(in: CharacterSet.whitespaces)
         return (key, value)
     }
 

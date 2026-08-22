@@ -253,16 +253,21 @@ public enum UCIOutputParser {
                 continue
             }
 
-            switch (current.depth, info.depth) {
-            case let (currentDepth?, newDepth?) where newDepth < currentDepth:
+            // A CHAIN, NOT A SWITCH. Kotlin has no optional-binding tuple
+            // pattern and no `where` clause on a case, so the three arms below
+            // are spelled as three statements. They are the same three, in the
+            // same order, with the same conditions.
+            if let currentDepth = current.depth,
+               let newDepth = info.depth,
+               newDepth < currentDepth {
                 continue
-            case (_?, nil):
-                continue
-            default:
-                // The new entry is deeper, equally deep, or both entries have
-                // no depth. Prefer it so the most recent data wins ties.
-                best[rank] = info
             }
+            if current.depth != nil, info.depth == nil {
+                continue
+            }
+            // The new entry is deeper, equally deep, or both entries have
+            // no depth. Prefer it so the most recent data wins ties.
+            best[rank] = info
         }
         return best
     }

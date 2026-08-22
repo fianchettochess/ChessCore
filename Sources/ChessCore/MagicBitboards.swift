@@ -30,7 +30,7 @@ typealias Bitboard = UInt64
 /// Clears the least-significant set bit and returns its index.
 @inline(__always) func popLSB(_ b: inout Bitboard) -> Int {
     let idx = b.trailingZeroBitCount
-    b &= b &- 1
+    b = b & (b &- 1)
     return idx
 }
 
@@ -62,21 +62,21 @@ struct LeaperTables {
             for (df, dr) in knightDeltas {
                 let f = file + df, r = rank + dr
                 if (0..<8).contains(f) && (0..<8).contains(r) {
-                    knight[sq] |= bit(r * 8 + f)
+                    knight[sq] = knight[sq] | (bit(r * 8 + f))
                 }
             }
             for (df, dr) in kingDeltas {
                 let f = file + df, r = rank + dr
                 if (0..<8).contains(f) && (0..<8).contains(r) {
-                    king[sq] |= bit(r * 8 + f)
+                    king[sq] = king[sq] | (bit(r * 8 + f))
                 }
             }
             // White pawn attacks one rank up; black one rank down.
             for df in [-1, 1] {
                 let f = file + df
                 if (0..<8).contains(f) {
-                    if rank + 1 < 8 { whitePawn[sq] |= bit((rank + 1) * 8 + f) }
-                    if rank - 1 >= 0 { blackPawn[sq] |= bit((rank - 1) * 8 + f) }
+                    if rank + 1 < 8 { whitePawn[sq] = whitePawn[sq] | (bit((rank + 1) * 8 + f)) }
+                    if rank - 1 >= 0 { blackPawn[sq] = blackPawn[sq] | (bit((rank - 1) * 8 + f)) }
                 }
             }
         }
@@ -92,9 +92,9 @@ struct LeaperTables {
 /// One square's magic entry: the relevant-occupancy mask, the magic multiplier,
 /// the right-shift, and the per-square slice of the shared attack table.
 struct MagicEntry {
-    var mask: Bitboard = 0
-    var magic: Bitboard = 0
-    var shift: UInt64 = 0
+    var mask: Bitboard = Bitboard(0)
+    var magic: Bitboard = Bitboard(0)
+    var shift: UInt64 = UInt64(0)
     var attacks: [Bitboard] = []
 }
 
@@ -113,9 +113,9 @@ struct MagicTables {
         init(seed: UInt64) { state = seed }
         mutating func next() -> UInt64 {
             var x = state
-            x ^= x >> 12
-            x ^= x << 25
-            x ^= x >> 27
+            x = x ^ (x >> 12)
+            x = x ^ (x << 25)
+            x = x ^ (x >> 27)
             state = x
             return x &* 0x2545F4914F6CDD1D
         }
@@ -130,12 +130,12 @@ struct MagicTables {
             : [(1, 1), (1, -1), (-1, 1), (-1, -1)]
         let file = square % 8
         let rank = square / 8
-        var attacks: Bitboard = 0
+        var attacks: Bitboard = Bitboard(0)
         for (df, dr) in deltas {
             var f = file + df, r = rank + dr
             while (0..<8).contains(f) && (0..<8).contains(r) {
                 let s = r * 8 + f
-                attacks |= bit(s)
+                attacks = attacks | (bit(s))
                 if occupancy & bit(s) != 0 { break }
                 f += df; r += dr
             }
@@ -149,22 +149,22 @@ struct MagicTables {
     static func relevantMask(square: Int, isRook: Bool) -> Bitboard {
         let file = square % 8
         let rank = square / 8
-        var mask: Bitboard = 0
+        var mask: Bitboard = Bitboard(0)
         if isRook {
             var r = rank + 1
-            while r <= 6 { mask |= bit(r * 8 + file); r += 1 }
+            while r <= 6 { mask = mask | (bit(r * 8 + file)); r += 1 }
             r = rank - 1
-            while r >= 1 { mask |= bit(r * 8 + file); r -= 1 }
+            while r >= 1 { mask = mask | (bit(r * 8 + file)); r -= 1 }
             var f = file + 1
-            while f <= 6 { mask |= bit(rank * 8 + f); f += 1 }
+            while f <= 6 { mask = mask | (bit(rank * 8 + f)); f += 1 }
             f = file - 1
-            while f >= 1 { mask |= bit(rank * 8 + f); f -= 1 }
+            while f >= 1 { mask = mask | (bit(rank * 8 + f)); f -= 1 }
         } else {
             let deltas = [(1, 1), (1, -1), (-1, 1), (-1, -1)]
             for (df, dr) in deltas {
                 var f = file + df, r = rank + dr
                 while (1...6).contains(f) && (1...6).contains(r) {
-                    mask |= bit(r * 8 + f)
+                    mask = mask | (bit(r * 8 + f))
                     f += df; r += dr
                 }
             }
@@ -175,13 +175,13 @@ struct MagicTables {
     /// Enumerate the `index`-th subset of the set bits in `mask` (carry-rippler
     /// indexing), used to enumerate every blocker configuration.
     static func occupancyForIndex(_ index: Int, mask: Bitboard) -> Bitboard {
-        var result: Bitboard = 0
+        var result: Bitboard = Bitboard(0)
         var m = mask
         var i = 0
         let bits = popcount(mask)
         while i < bits {
             let sq = popLSB(&m)
-            if index & (1 << i) != 0 { result |= bit(sq) }
+            if index & (1 << i) != 0 { result = result | (bit(sq)) }
             i += 1
         }
         return result

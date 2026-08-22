@@ -240,27 +240,66 @@ public enum MoveGenerator {
 // MARK: - Bitboard representation + generation
 
 /// Inline (value-type, stack-allocated) store for the twelve piece bitboards —
-/// `[color][type]` flattened to `color * 6 + type` — backed by a homogeneous
-/// tuple so it carries NO heap allocation and NO ARC traffic. Building and
+/// `[color][type]` flattened to `color * 6 + type` — twelve stored `UInt64`
+/// fields, so it carries NO heap allocation and NO ARC traffic. Building and
 /// copying a `Boards12` is a handful of register/stack moves, which is what
 /// makes the per-node `isLegal` make/unmake cheap. (A nested `[[UInt64]]` here
 /// was the bottleneck in the first cut: a heap alloc per node + deep copy per
-/// legality test.) Index access goes through an unsafe pointer over the tuple —
-/// a well-defined Swift pattern for fixed homogeneous tuples.
+/// legality test.) Index access goes through a `switch` over the twelve fields;
+/// see the note on the declaration for why this is not a tuple.
 struct Boards12 {
-    var storage: (UInt64, UInt64, UInt64, UInt64, UInt64, UInt64,
-                  UInt64, UInt64, UInt64, UInt64, UInt64, UInt64) =
-        (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+    // TWELVE STORED PROPERTIES, NOT A TUPLE. The original spelling was one
+    // homogeneous 12-tuple indexed through `withUnsafeBytes`, which is the
+    // idiomatic Swift way to get array-like access with no heap. It is also
+    // doubly untranslatable: Skip refuses tuples of arity > 5 AND the whole
+    // `Unsafe*Pointer` family. Twelve named fields plus a `switch` keep the
+    // value semantics, the stack allocation and the ARC-free copy the comment
+    // above is about, and lower to twelve JVM `long` fields and a tableswitch
+    // rather than a boxed array.
+    var b0: UInt64 = UInt64(0)
+    var b1: UInt64 = UInt64(0)
+    var b2: UInt64 = UInt64(0)
+    var b3: UInt64 = UInt64(0)
+    var b4: UInt64 = UInt64(0)
+    var b5: UInt64 = UInt64(0)
+    var b6: UInt64 = UInt64(0)
+    var b7: UInt64 = UInt64(0)
+    var b8: UInt64 = UInt64(0)
+    var b9: UInt64 = UInt64(0)
+    var b10: UInt64 = UInt64(0)
+    var b11: UInt64 = UInt64(0)
 
     @inline(__always) subscript(_ i: Int) -> UInt64 {
         get {
-            withUnsafeBytes(of: storage) {
-                $0.baseAddress!.assumingMemoryBound(to: UInt64.self)[i]
+            switch i {
+            case 0: return b0
+            case 1: return b1
+            case 2: return b2
+            case 3: return b3
+            case 4: return b4
+            case 5: return b5
+            case 6: return b6
+            case 7: return b7
+            case 8: return b8
+            case 9: return b9
+            case 10: return b10
+            default: return b11
             }
         }
         set {
-            withUnsafeMutableBytes(of: &storage) {
-                $0.baseAddress!.assumingMemoryBound(to: UInt64.self)[i] = newValue
+            switch i {
+            case 0: b0 = newValue
+            case 1: b1 = newValue
+            case 2: b2 = newValue
+            case 3: b3 = newValue
+            case 4: b4 = newValue
+            case 5: b5 = newValue
+            case 6: b6 = newValue
+            case 7: b7 = newValue
+            case 8: b8 = newValue
+            case 9: b9 = newValue
+            case 10: b10 = newValue
+            default: b11 = newValue
             }
         }
     }
@@ -282,9 +321,9 @@ struct BitBoard {
     //   color: 0 = white, 1 = black
     //   type:  0=king 1=queen 2=rook 3=bishop 4=knight 5=pawn
     var pieces = Boards12()
-    var occWhite: Bitboard = 0
-    var occBlack: Bitboard = 0
-    var allOcc: Bitboard = 0
+    var occWhite: Bitboard = Bitboard(0)
+    var occBlack: Bitboard = Bitboard(0)
+    var allOcc: Bitboard = Bitboard(0)
 
     let side: Int            // 0 = white to move, 1 = black
     let castling: CastlingRights
@@ -323,14 +362,14 @@ struct BitBoard {
 
         let board = position.board
         var pieces = Boards12()
-        var occW: Bitboard = 0
-        var occB: Bitboard = 0
+        var occW: Bitboard = Bitboard(0)
+        var occB: Bitboard = Bitboard(0)
         for i in 0..<64 {
             guard let p = board[i] else { continue }
             let c = p.color == .white ? 0 : 1
             let t = BitBoard.typeIndex(p.type)
-            pieces[c, t] |= bit(i)
-            if c == 0 { occW |= bit(i) } else { occB |= bit(i) }
+            pieces[c, t] = pieces[c, t] | (bit(i))
+            if c == 0 { occW = occW | (bit(i)) } else { occB = occB | (bit(i)) }
         }
         self.pieces = pieces
         self.occWhite = occW
@@ -441,28 +480,28 @@ struct BitBoard {
         let pType = BitBoard.typeIndex(move.piece)
 
         // Remove mover from origin.
-        pieces[us, pType] &= ~bit(fromI)
-        occAll &= ~bit(fromI)
+        pieces[us, pType] = pieces[us, pType] & (~bit(fromI))
+        occAll = occAll & (~bit(fromI))
 
         // Remove captured piece (en passant captures off the destination file).
         if move.isEnPassant {
             let capRank = us == 0 ? (toI / 8) - 1 : (toI / 8) + 1
             let capSq = capRank * 8 + (toI % 8)
-            pieces[them, 5] &= ~bit(capSq)
-            occAll &= ~bit(capSq)
+            pieces[them, 5] = pieces[them, 5] & (~bit(capSq))
+            occAll = occAll & (~bit(capSq))
         } else if let captured = move.capturedPiece {
             let capT = BitBoard.typeIndex(captured)
-            pieces[them, capT] &= ~bit(toI)
-            occAll &= ~bit(toI)
+            pieces[them, capT] = pieces[them, capT] & (~bit(toI))
+            occAll = occAll & (~bit(toI))
         }
 
         // Place mover (promotion swaps the type) at destination.
         if let promo = move.promotion {
-            pieces[us, BitBoard.typeIndex(promo)] |= bit(toI)
+            pieces[us, BitBoard.typeIndex(promo)] = pieces[us, BitBoard.typeIndex(promo)] | (bit(toI))
         } else {
-            pieces[us, pType] |= bit(toI)
+            pieces[us, pType] = pieces[us, pType] | (bit(toI))
         }
-        occAll |= bit(toI)
+        occAll = occAll | (bit(toI))
 
         // Move the rook for castling so its new square is considered.
         if move.isCastling {
@@ -483,10 +522,10 @@ struct BitBoard {
             // into the check test for hand-constructed castles that bypassed
             // generation (which does verify the rook).
             guard pieces[us, 2] & bit(rookFrom) != 0 else { return false }
-            pieces[us, 2] &= ~bit(rookFrom)
-            pieces[us, 2] |= bit(rookTo)
-            occAll &= ~bit(rookFrom)
-            occAll |= bit(rookTo)
+            pieces[us, 2] = pieces[us, 2] & (~bit(rookFrom))
+            pieces[us, 2] = pieces[us, 2] | (bit(rookTo))
+            occAll = occAll & (~bit(rookFrom))
+            occAll = occAll | (bit(rookTo))
         }
 
         let kingBoard = pieces[us, 0]
