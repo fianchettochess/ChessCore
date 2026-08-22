@@ -154,6 +154,8 @@ public struct UCIInfo: Sendable, Equatable {
 ///   keyed by `multipv ?? 1` they would overwrite pv-bearing rank-1 entries in
 ///   a per-rank accumulator.
 /// - Parses `nps`.
+/// - Stops at `string`, `refutation` and `currline`, which UCI defines as
+///   running to the end of the line. Their contents are never read as fields.
 /// - `parseBestMove` treats `bestmove (none)` as `nil` (terminal position).
 public enum UCIOutputParser {
 
@@ -165,7 +167,7 @@ public enum UCIOutputParser {
         // array on the engine's highest-frequency output.
         let tokens = line.split(separator: " ")
         guard tokens.first == "info" else { return nil }
-        if line.contains("lowerbound") || line.contains("upperbound") { return nil }
+
 
         var result = UCIInfo()
         var i = 1
@@ -184,12 +186,35 @@ public enum UCIOutputParser {
                 if i + 2 < tokens.count {
                     let kind = tokens[i + 1]
                     let value = Int(tokens[i + 2])
+                    // UCI: `score cp <x> [lowerbound|upperbound]` — the bound
+                    // qualifies THIS score and can only follow its value.
+                    // Matching it positionally rather than anywhere in the line
+                    // is what keeps a pv move or free text from being read as a
+                    // bound.
+                    if i + 3 < tokens.count,
+                       tokens[i + 3] == "lowerbound" || tokens[i + 3] == "upperbound" {
+                        // An aspiration-window artefact: the true eval is only
+                        // known to be above/below the number, so the line is
+                        // discarded rather than reported as a real score.
+                        return nil
+                    }
                     if kind == "cp" { result.scoreCp = value }
                     else if kind == "mate" { result.mateIn = value }
                 }
                 i += 3
             case "pv":
                 if i + 1 < tokens.count { result.pv = tokens[(i + 1)...].map(String.init) }
+                i = tokens.count
+            case "string", "refutation", "currline":
+                // UCI defines all three as running to end of line: `string` is
+                // free text for display ("should be the last command on the
+                // line"), and refutation/currline carry move lists. Scanning
+                // past them reads free text as engine fields — an engine that
+                // logged "info string fallback pv e2e4 is unavailable" yielded
+                // a pv of ["e2e4", "is", "unavailable"], and one that logged a
+                // score in a string produced a FABRICATED evaluation that the
+                // per-rank accumulator would then treat as rank 1. Stop here;
+                // the score/pv guard below then rejects the line as noise.
                 i = tokens.count
             default:
                 i += 1
