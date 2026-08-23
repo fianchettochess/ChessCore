@@ -91,15 +91,11 @@ public enum MoveGenerator {
             position[Square(file: move.to.file, rank: capturedRank)] = nil
         }
 
-        if move.isCastling {
-            let rank = move.to.rank
-            if move.to.file == 6 {
-                position[Square(file: 5, rank: rank)] = position[Square(file: 7, rank: rank)]
-                position[Square(file: 7, rank: rank)] = nil
-            } else if move.to.file == 2 {
-                position[Square(file: 3, rank: rank)] = position[Square(file: 0, rank: rank)]
-                position[Square(file: 0, rank: rank)] = nil
-            }
+        // The rook squares are stated once, on Move, so that applying a castle
+        // here and drawing or undoing one elsewhere cannot disagree.
+        if let rook = move.castlingRookTravel {
+            position[rook.to] = position[rook.from]
+            position[rook.from] = nil
         }
 
         if piece.type == .pawn && abs(move.to.rank - move.from.rank) == 2 {

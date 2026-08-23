@@ -324,6 +324,30 @@ public struct Move: Equatable, Hashable, Sendable {
     }
 }
 
+extension Move {
+    /// Where the rook travels when this move castles, or `nil` when it does not.
+    ///
+    /// Castling moves two pieces, and only the king's travel is carried in
+    /// ``Move/from`` and ``Move/to``. The rook's is implied by the king's
+    /// destination file: to file 6 the rook goes 7 → 5, to file 2 it goes
+    /// 0 → 3, both on the king's rank. That is a rule of the game rather than a
+    /// choice, so it is stated once here instead of being rederived wherever a
+    /// castle has to be applied, drawn, or undone.
+    ///
+    /// Returns `nil` for a move flagged as castling whose destination is
+    /// neither file — a malformed move describes no rook travel, and inventing
+    /// one would move a piece that should not move.
+    public var castlingRookTravel: (from: Square, to: Square)? {
+        guard isCastling else { return nil }
+        let rank = to.rank
+        switch to.file {
+        case 6:  return (Square(file: 7, rank: rank), Square(file: 5, rank: rank))
+        case 2:  return (Square(file: 0, rank: rank), Square(file: 3, rank: rank))
+        default: return nil
+        }
+    }
+}
+
 public struct MoveRecord: Sendable {
     public let move: Move
     public let notation: String
