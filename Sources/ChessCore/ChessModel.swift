@@ -13,17 +13,69 @@ import Foundation
 public enum PieceColor: Equatable, Hashable, Codable, Sendable {
     case white, black
 
-    // NOTE, AND IT DESERVES A FIX OF ITS OWN. This encodes as `{"white":{}}`
-    // (measured): Swift synthesizes Codable for a no-raw-value enum as a keyed
-    // container. `persistenceKey` below is documented as the form to "write to
-    // disk or send over a wire" and spells the same value "white". One type,
-    // two serializations, and the automatic one — which every Codable
-    // container gets — disagrees with the documented one.
+    // TWO ENCODED FORMS, ONE OF THEM LEGACY. This type has always had two
+    // spellings and they disagreed: `persistenceKey` below is documented as the
+    // form to "write to disk or send over a wire" and says `"white"`, while
+    // synthesized `Codable` — which every `Codable` container gets for free —
+    // emits `{"white":{}}`, because Swift encodes a no-raw-value enum as a
+    // keyed container. Anything that persisted a `PieceColor` through `Codable`
+    // rather than through `persistenceKey` therefore wrote the OTHER form.
     //
-    // NOT fixed here because it is a MIGRATION, not a cleanup:
-    // `CombinationPuzzle.solver` is persisted through a BlobBackedStore, so
-    // `{"white":{}}` is on disk in real installs. Closing it means accepting
-    // both forms on decode and migrating the stored blobs.
+    // PHASE 1 OF TWO, DELIBERATELY. This decoder accepts BOTH forms; the
+    // encoder still emits the legacy keyed form, byte for byte. Four packages
+    // resolve ChessCore independently (FianchettoKit, the CMP bridge, the Skip
+    // face and the CLI, all `from: "0.10.0"`) and ship on different cadences,
+    // so a build that starts WRITING the string form before every reader can
+    // read it produces blobs its siblings cannot open. Phase 2 — switching the
+    // encoder — is safe only once every face has shipped this decoder.
+    //
+    // The live instance is `CombinationPuzzle.solver`, persisted through
+    // `CombinationPuzzleStore: BlobBackedStore`, so the keyed form is on disk
+    // in real installs today.
+    private enum CodingKeys: String, CodingKey { case white, black }
+
+    public init(from decoder: Decoder) throws {
+        // The forward form first: a bare `"white"` / `"black"`.
+        if let single = try? decoder.singleValueContainer(),
+           let raw = try? single.decode(String.self) {
+            switch raw {
+            case PieceColor.white.persistenceKey: self = .white
+            case PieceColor.black.persistenceKey: self = .black
+            default:
+                throw DecodingError.dataCorrupted(
+                    DecodingError.Context(
+                        codingPath: single.codingPath,
+                        debugDescription: "PieceColor expects \"white\" or \"black\", got \"\(raw)\""
+                    )
+                )
+            }
+            return
+        }
+        // The legacy synthesized form: `{"white":{}}`.
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        if container.contains(.white) {
+            self = .white
+        } else if container.contains(.black) {
+            self = .black
+        } else {
+            throw DecodingError.dataCorrupted(
+                DecodingError.Context(
+                    codingPath: container.codingPath,
+                    debugDescription: "PieceColor requires a 'white' or 'black' key"
+                )
+            )
+        }
+    }
+
+    /// Emits the LEGACY keyed form, unchanged. See the note above: the encoder
+    /// moves in phase 2, not here.
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        case .white: _ = container.nestedContainer(keyedBy: CodingKeys.self, forKey: .white)
+        case .black: _ = container.nestedContainer(keyedBy: CodingKeys.self, forKey: .black)
+        }
+    }
 
     public var opposite: PieceColor {
         self == .white ? .black : .white
@@ -77,6 +129,65 @@ public enum PieceColor: Equatable, Hashable, Codable, Sendable {
 
 public enum PieceType: Equatable, Hashable, Codable, Sendable {
     case king, queen, rook, bishop, knight, pawn
+
+    /// The lowercase English spelling — the same vocabulary `fenChar` and the
+    /// PGN writers already use, and the form phase 2 will encode.
+    public var persistenceKey: String {
+        switch self {
+        case .king: return "king"
+        case .queen: return "queen"
+        case .rook: return "rook"
+        case .bishop: return "bishop"
+        case .knight: return "knight"
+        case .pawn: return "pawn"
+        }
+    }
+
+    // Phase 1 of two, for the reason spelled out on `PieceColor`: accept the
+    // bare string AND the legacy `{"knight":{}}` keyed form, keep emitting the
+    // legacy one until every face can read both.
+    private enum CodingKeys: String, CodingKey {
+        case king, queen, rook, bishop, knight, pawn
+    }
+
+    private static let byKey: [String: PieceType] = [
+        "king": .king, "queen": .queen, "rook": .rook,
+        "bishop": .bishop, "knight": .knight, "pawn": .pawn,
+    ]
+
+    public init(from decoder: Decoder) throws {
+        if let single = try? decoder.singleValueContainer(),
+           let raw = try? single.decode(String.self) {
+            guard let value = PieceType.byKey[raw] else {
+                throw DecodingError.dataCorrupted(
+                    DecodingError.Context(
+                        codingPath: single.codingPath,
+                        debugDescription: "PieceType does not know \"\(raw)\""
+                    )
+                )
+            }
+            self = value
+            return
+        }
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        guard let key = container.allKeys.first,
+              let value = PieceType.byKey[key.stringValue] else {
+            throw DecodingError.dataCorrupted(
+                DecodingError.Context(
+                    codingPath: container.codingPath,
+                    debugDescription: "PieceType requires exactly one piece-name key"
+                )
+            )
+        }
+        self = value
+    }
+
+    /// Emits the LEGACY keyed form, unchanged.
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        let key = CodingKeys(stringValue: persistenceKey)!
+        _ = container.nestedContainer(keyedBy: CodingKeys.self, forKey: key)
+    }
 }
 
 public struct Piece: Equatable, Hashable, Codable, Sendable {
