@@ -554,6 +554,57 @@ public enum PGNParser {
         pattern: #"\[%eval\s+(#?[-+]?\d+(?:\.\d+)?)\]"#
     )
 
+    /// Spell an evaluation the way the `[%eval …]` command wants it, or answer
+    /// `nil` when it cannot be spelled that way at all.
+    ///
+    /// This is the INVERSE of the `[%eval …]` branch of ``parseEngineComment``
+    /// and lives beside it so the pair cannot drift: `parseEngineComment`
+    /// reports a mate distance as `M3` / `-M3` and a decimal exactly as
+    /// written, and this turns those back into `#3` / `#-3` and the decimal.
+    /// ``PGNExporter`` used to write the evaluation BARE (`{+0.34}`) next to a
+    /// perfectly standard `[%clk 0:03:00]` in the same comment, so this
+    /// library could re-read its own output while Lichess, ChessBase and
+    /// python-chess could not see the evaluation at all.
+    ///
+    /// A decimal is required to have a decimal point with one or two places —
+    /// which is what ``EvalFormat`` produces and what the readers in the field
+    /// accept (python-chess's pattern is `[+-]?\d{0,10}\.\d{1,2}`). A leading
+    /// `+` is kept: it is inside every one of those patterns.
+    ///
+    /// Returns `nil` for a mate with NO distance (the bare `M` / `-M` this
+    /// app's annotation-restore path stores when the distance was not
+    /// recoverable). `[%eval #]` is not a thing, and inventing a distance to
+    /// fill the slot would publish a fact about the position that nothing
+    /// measured — so callers emit those bare, exactly as before.
+    public static func evalCommandArgument(for eval: String) -> String? {
+        let trimmed = eval.trimmingCharacters(in: CharacterSet.whitespaces)
+        guard !trimmed.isEmpty else { return nil }
+
+        var body = Substring(trimmed)
+        var sign = ""
+        if body.hasPrefix("-") {
+            sign = "-"
+            body = body.dropFirst()
+        } else if body.hasPrefix("+") {
+            body = body.dropFirst()
+        }
+
+        if body.hasPrefix("M") {
+            let distance = body.dropFirst()
+            // Bare `M` / `-M`: a mate is known, its distance is not.
+            guard !distance.isEmpty, distance.allSatisfy({ $0.isNumber }) else { return nil }
+            return "#\(sign)\(distance)"
+        }
+
+        // A decimal in pawns: digits, one point, one or two places.
+        let parts = body.split(separator: ".", omittingEmptySubsequences: false)
+        guard parts.count == 2,
+              !parts[0].isEmpty, parts[0].allSatisfy({ $0.isNumber }),
+              (1...2).contains(parts[1].count), parts[1].allSatisfy({ $0.isNumber })
+        else { return nil }
+        return trimmed
+    }
+
     /// Split a PGN move comment into the engine annotations it carries and the
     /// prose that is left over.
     ///

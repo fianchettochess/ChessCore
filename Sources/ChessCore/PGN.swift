@@ -317,7 +317,23 @@ extension PGNExporter {
 
         if let eval = node.engineEval {
             if needsSeparator { result += " " }
-            result += eval
+            // THE SAME COMMAND SYNTAX THE CLOCK ABOVE ALREADY USES. This wrote
+            // the evaluation bare — `{[%clk 0:03:00] +0.34}` — so the clock was
+            // legible to every tool and the evaluation to none of them: Lichess,
+            // ChessBase and python-chess all read `[%eval …]` and nothing else,
+            // and `PGNParser.parseEngineComment`'s bare-token branch was the
+            // only reader in the world that recovered it.
+            //
+            // `evalCommandArgument` answers nil only for a mate with no
+            // distance (`M` / `-M`), which the command has no spelling for;
+            // those keep the bare form rather than being dropped or invented.
+            // The reader accepts both spellings, so files exported before today
+            // — and every already-stored `moveText` — still parse unchanged.
+            if let command = PGNParser.evalCommandArgument(for: eval) {
+                result += "[%eval \(command)]"
+            } else {
+                result += eval
+            }
             needsSeparator = true
         }
 
