@@ -1,13 +1,15 @@
 import XCTest
 @testable import ChessCore
 
-/// Phase 1 of the `PieceColor`/`PieceType` serialization migration.
+/// Phase 2 of the `PieceColor`/`PieceType` serialization migration.
 ///
 /// The type had two disagreeing spellings: `persistenceKey` says `"white"` and
 /// is documented as the form to write to disk, while synthesized `Codable`
-/// emitted `{"white":{}}`. These tests pin the phase-1 contract — READ BOTH,
-/// WRITE THE LEGACY ONE — so that phase 2 (moving the encoder) is a one-line
-/// change with a test that already describes the destination.
+/// emitted `{"white":{}}`. Phase 1 pinned READ BOTH, WRITE THE LEGACY ONE;
+/// phase 2 moved the encoder, so these tests now pin READ BOTH, WRITE THE
+/// STRING FORM — the two spellings agree from here on. The legacy-decode
+/// tests stay: blobs written before this release are on disk in real
+/// installs and this type will keep reading them.
 final class PieceCodableMigrationTests: XCTestCase {
 
     private func decoded<T: Decodable>(_ json: String, as: T.Type) throws -> T {
@@ -61,15 +63,15 @@ final class PieceCodableMigrationTests: XCTestCase {
         XCTAssertEqual(piece, Piece(type: .queen, color: .black))
     }
 
-    // MARK: - The encoder has NOT moved. Phase 2 flips this test, deliberately.
+    // MARK: - The encoder now writes the string form. Phase 2, landed.
 
-    func testEncoderStillEmitsTheLegacyForm() throws {
-        XCTAssertEqual(try encoded(PieceColor.white), #"{"white":{}}"#)
-        XCTAssertEqual(try encoded(PieceColor.black), #"{"black":{}}"#)
-        XCTAssertEqual(try encoded(PieceType.knight), #"{"knight":{}}"#)
+    func testEncoderNowEmitsTheStringForm() throws {
+        XCTAssertEqual(try encoded(PieceColor.white), #""white""#)
+        XCTAssertEqual(try encoded(PieceColor.black), #""black""#)
+        XCTAssertEqual(try encoded(PieceType.knight), #""knight""#)
         XCTAssertEqual(
             try encoded(Piece(type: .knight, color: .white)),
-            #"{"color":{"white":{}},"type":{"knight":{}}}"#
+            #"{"color":"white","type":"knight"}"#
         )
     }
 

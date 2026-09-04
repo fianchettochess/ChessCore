@@ -11,6 +11,27 @@ breaking `0.10.0`.
 
 Published tags are never moved or re-cut.
 
+## [0.11.0] — 2026-09-03
+
+Breaking. Phase 2 of the `PieceColor`/`PieceType` serialization migration —
+phase 1 (0.10.3) taught the decoder to read the string form ahead of anything
+writing it; this flips the encoder to write it.
+
+### Changed
+
+- **`PieceColor` and `PieceType` now encode as a bare string** —
+  `PieceColor.white` writes `"white"`, `PieceType.knight` writes `"knight"` —
+  matching `persistenceKey`, instead of the keyed container synthesized
+  `Codable` used to produce (`{"white":{}}`, `{"knight":{}}`). A `Piece`
+  encodes accordingly: `{"color":"white","type":"knight"}` rather than
+  `{"color":{"white":{}},"type":{"knight":{}}}`.
+
+  The decoder is unchanged and unaffected: it has accepted both forms since
+  0.10.3 and keeps doing so, so blobs written before this release still load.
+  Only the shape of newly-written blobs changes. Nothing else in this package
+  persists a `PieceColor` or `PieceType` outside `persistenceKey`/`Codable`,
+  so no other symbol moves.
+
 ## [0.9.1] — 2026-08-19
 
 Additive. No source-compatibility change.

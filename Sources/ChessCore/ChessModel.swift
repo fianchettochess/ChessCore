@@ -17,21 +17,18 @@ public enum PieceColor: Equatable, Hashable, Codable, Sendable {
     // spellings and they disagreed: `persistenceKey` below is documented as the
     // form to "write to disk or send over a wire" and says `"white"`, while
     // synthesized `Codable` — which every `Codable` container gets for free —
-    // emits `{"white":{}}`, because Swift encodes a no-raw-value enum as a
+    // emitted `{"white":{}}`, because Swift encodes a no-raw-value enum as a
     // keyed container. Anything that persisted a `PieceColor` through `Codable`
     // rather than through `persistenceKey` therefore wrote the OTHER form.
     //
-    // PHASE 1 OF TWO, DELIBERATELY. This decoder accepts BOTH forms; the
-    // encoder still emits the legacy keyed form, byte for byte. Four packages
-    // resolve ChessCore independently (FianchettoKit, the CMP bridge, the Skip
-    // face and the CLI, all `from: "0.10.0"`) and ship on different cadences,
-    // so a build that starts WRITING the string form before every reader can
-    // read it produces blobs its siblings cannot open. Phase 2 — switching the
-    // encoder — is safe only once every face has shipped this decoder.
-    //
-    // The live instance is `CombinationPuzzle.solver`, persisted through
-    // `CombinationPuzzleStore: BlobBackedStore`, so the keyed form is on disk
-    // in real installs today.
+    // PHASE 2 OF TWO, NOW LANDED (0.11.0). Phase 1 (0.10.3) taught the decoder
+    // to accept BOTH forms while the encoder kept emitting the legacy one, so
+    // that every package resolving ChessCore independently could ship the new
+    // decoder before anything started writing the new form. The decoder below
+    // still reads both, and always will: blobs written before this release are
+    // on disk in real installs (`CombinationPuzzle.solver`, persisted through
+    // `CombinationPuzzleStore: BlobBackedStore`) and do not rewrite themselves.
+    // Only the encoder moved.
     private enum CodingKeys: String, CodingKey { case white, black }
 
     public init(from decoder: Decoder) throws {
@@ -67,14 +64,11 @@ public enum PieceColor: Equatable, Hashable, Codable, Sendable {
         }
     }
 
-    /// Emits the LEGACY keyed form, unchanged. See the note above: the encoder
-    /// moves in phase 2, not here.
+    /// Emits the forward form: a bare `"white"` / `"black"`, matching
+    /// `persistenceKey`. See the note above: this is phase 2 of the migration.
     public func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        switch self {
-        case .white: _ = container.nestedContainer(keyedBy: CodingKeys.self, forKey: .white)
-        case .black: _ = container.nestedContainer(keyedBy: CodingKeys.self, forKey: .black)
-        }
+        var container = encoder.singleValueContainer()
+        try container.encode(persistenceKey)
     }
 
     public var opposite: PieceColor {
@@ -131,7 +125,7 @@ public enum PieceType: Equatable, Hashable, Codable, Sendable {
     case king, queen, rook, bishop, knight, pawn
 
     /// The lowercase English spelling — the same vocabulary `fenChar` and the
-    /// PGN writers already use, and the form phase 2 will encode.
+    /// PGN writers already use, and the form the encoder below now writes.
     public var persistenceKey: String {
         switch self {
         case .king: return "king"
@@ -143,9 +137,10 @@ public enum PieceType: Equatable, Hashable, Codable, Sendable {
         }
     }
 
-    // Phase 1 of two, for the reason spelled out on `PieceColor`: accept the
-    // bare string AND the legacy `{"knight":{}}` keyed form, keep emitting the
-    // legacy one until every face can read both.
+    // Phase 2 of two, for the reason spelled out on `PieceColor`: the decoder
+    // still accepts both the bare string and the legacy `{"knight":{}}` keyed
+    // form (old blobs don't rewrite themselves), but the encoder below now
+    // writes the string form.
     private enum CodingKeys: String, CodingKey {
         case king, queen, rook, bishop, knight, pawn
     }
@@ -182,11 +177,10 @@ public enum PieceType: Equatable, Hashable, Codable, Sendable {
         self = value
     }
 
-    /// Emits the LEGACY keyed form, unchanged.
+    /// Emits the forward form: a bare string matching `persistenceKey`.
     public func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        let key = CodingKeys(stringValue: persistenceKey)!
-        _ = container.nestedContainer(keyedBy: CodingKeys.self, forKey: key)
+        var container = encoder.singleValueContainer()
+        try container.encode(persistenceKey)
     }
 }
 
