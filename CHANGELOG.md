@@ -11,6 +11,31 @@ breaking `0.10.0`.
 
 Published tags are never moved or re-cut.
 
+## [Unreleased]
+
+Additive and behaviour fixes only; no source break.
+
+### Fixed
+
+- **A game that ended off the board exports its real result.** `GameState`
+  has no case for resignation, time forfeit or an agreed draw, so the
+  exporter closed such a game's movetext with `*` even when the Result tag
+  said `1-0` — a document whose token and tag disagree. The closing token now
+  comes from the board when it can decide, and otherwise from a decided
+  Result tag.
+- **The reader no longer lets a `*` token override a decided Result tag.**
+  `PGNGame.resultText` prefers a decided closing token, then a decided tag,
+  then `*`.
+- **Engine comments tolerate line breaks.** `parseEngineComment` trimmed
+  spaces but not newlines, so an evaluation after a wrapped `;` read as prose.
+- **A bare mate marker reads back as an evaluation.** `M` / `-M` (a forced
+  mate whose distance was not known) was written by FianchettoKit and read
+  back as a comment; it is now an evaluation.
+
+### Added
+
+- `PGNGame.decidedResults` — the three decided result strings.
+
 ## [0.11.0] — 2026-09-03
 
 Breaking. Phase 2 of the `PieceColor`/`PieceType` serialization migration —

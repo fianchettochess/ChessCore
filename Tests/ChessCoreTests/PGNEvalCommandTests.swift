@@ -74,9 +74,10 @@ final class PGNEvalCommandTests: XCTestCase {
         guard let reloaded = PGNParser.loadGame(from: "[Result \"*\"]\n\n\(exported) *") else {
             XCTFail("export must re-import"); return
         }
-        XCTAssertNil(reloaded.mainLine[0].engineEval,
-                     "unchanged pre-existing gap: a digit-less eval token reads as prose")
-        XCTAssertEqual(reloaded.mainLine[0].comment, "-M")
+        // The gap this test used to record is closed: a bare mate marker is
+        // read back as the evaluation it was written as, not as prose.
+        XCTAssertEqual(reloaded.mainLine[0].engineEval, "-M")
+        XCTAssertNil(reloaded.mainLine[0].comment)
         XCTAssertEqual(reloaded.mainLine[1].engineEval, "M3",
                        "control: the mate WITH a distance survives the round trip")
     }

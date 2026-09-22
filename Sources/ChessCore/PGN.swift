@@ -203,7 +203,7 @@ extension PGNExporter {
         let basePly = startPlyOffset(for: game.startPosition)
         var moveText = String()
         writeNodes(game.rootChildren, basePly: basePly, into: &moveText)
-        moveText += resultString(for: game)
+        moveText += terminationToken(for: game, tags: exportTags)
         lines.append(wrapMoveText(moveText.trimmingCharacters(in: .whitespaces)))
 
         return lines.joined(separator: "\n")
@@ -390,6 +390,22 @@ extension PGNExporter {
         tags["Black"] = "Player 2"
         tags["Result"] = resultString(for: game)
         return tags
+    }
+
+    /// The movetext's closing token, which PGN requires to equal the Result
+    /// tag.
+    ///
+    /// The board decides when it can — mate and the automatic draws. When it
+    /// cannot, because the game ended off the board (a resignation, a flag,
+    /// an agreed draw — `GameState` has no case for any of them), a decided
+    /// Result tag is the answer. This used to write `*` for those, so a
+    /// resigned game exported `[Result "1-0"]` over movetext ending `*`, and a
+    /// reader that trusts the token read the game back as unfinished.
+    static func terminationToken(for game: Game, tags: PGNGame.OrderedTags) -> String {
+        let fromBoard = resultString(for: game)
+        if fromBoard != "*" { return fromBoard }
+        if let tagged = tags["Result"], PGNGame.decidedResults.contains(tagged) { return tagged }
+        return "*"
     }
 
     private static func resultString(for game: Game) -> String {

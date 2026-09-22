@@ -31,7 +31,18 @@ public struct PGNGame: Identifiable, Sendable {
     public var black: String { tags["Black"] ?? "?" }
     public var date: String { tags["Date"] ?? "?" }
     public var event: String { tags["Event"] ?? "" }
-    public var resultText: String { result ?? tags["Result"] ?? "*" }
+    /// The game's result: the movetext's closing token, unless that token is
+    /// `*` and the Result tag records a decided game — then the tag. A `*`
+    /// closing a decided game is an exporter that could not see how it ended
+    /// (see `PGNExporter.terminationToken`), not a claim that it is unfinished.
+    public var resultText: String {
+        if let result, result != "*" { return result }
+        if let tagged = tags["Result"], Self.decidedResults.contains(tagged) { return tagged }
+        return result ?? tags["Result"] ?? "*"
+    }
+
+    /// The three decided PGN results.
+    public static let decidedResults: Set<String> = ["1-0", "0-1", "1/2-1/2"]
     public var opening: String { tags["Opening"] ?? tags["ECO"] ?? "" }
     public var moveCount: Int { (moves.count + 1) / 2 }
 
@@ -656,7 +667,7 @@ public enum PGNParser {
                 }
                 if let r = Range(match.range, in: remaining) {
                     remaining.removeSubrange(r)
-                    remaining = remaining.trimmingCharacters(in: CharacterSet.whitespaces)
+                    remaining = remaining.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
                 }
             }
         }
@@ -680,12 +691,15 @@ public enum PGNParser {
                 }
                 if let r = Range(match.range, in: remaining) {
                     remaining.removeSubrange(r)
-                    remaining = remaining.trimmingCharacters(in: CharacterSet.whitespaces)
+                    remaining = remaining.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
                 }
             }
         }
 
-        let parts = remaining.components(separatedBy: ";").map { $0.trimmingCharacters(in: CharacterSet.whitespaces) }
+        // Newlines as well as spaces: an exporter that wraps long comments
+        // puts a line break after the ";", and a part left starting "\n+0.34"
+        // failed every prefix test below and read as prose.
+        let parts = remaining.components(separatedBy: ";").map { $0.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines) }
         var eval: String? = taggedEval
         var bestMove: String?
         var commentParts: [String] = []
@@ -699,8 +713,13 @@ public enum PGNParser {
                 // the digit requirement the Informant symbols `+-` and `-+`
                 // satisfy the character test and are silently eaten out of the
                 // reader's prose.
-                let isEval = part.contains(where: { $0.isNumber })
-                    && part.allSatisfy { $0.isNumber || $0 == "." || $0 == "+" || $0 == "-" || $0 == "M" }
+                //
+                // A bare `M` / `-M` is the exception: a forced mate whose
+                // distance the writer did not know. FianchettoKit writes it,
+                // and without this it could not be read back as an evaluation.
+                let isBareMate = part == "M" || part == "-M" || part == "+M"
+                let isEval = isBareMate || (part.contains(where: { $0.isNumber })
+                    && part.allSatisfy { $0.isNumber || $0 == "." || $0 == "+" || $0 == "-" || $0 == "M" })
                 if isEval {
                     // A `[%eval …]` tag, being the standardized spelling, wins
                     // over a bare token in the same comment.
