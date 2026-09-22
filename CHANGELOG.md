@@ -11,7 +11,7 @@ breaking `0.10.0`.
 
 Published tags are never moved or re-cut.
 
-## [Unreleased]
+## [0.11.1] — 2026-09-22
 
 Additive and behaviour fixes only; no source break.
 
