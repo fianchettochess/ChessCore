@@ -11,6 +11,19 @@ breaking `0.10.0`.
 
 Published tags are never moved or re-cut.
 
+## [Unreleased]
+
+### Fixed
+
+- **An engine best move wrapped onto its own line is still the best move.**
+  The exporter wraps movetext at any space, inside comments too, so
+  `{+0.34; best Qh5}` could export with `best` and `Qh5` on two lines, and
+  `parseEngineComment` only recognised `best` followed by a literal space.
+  0.11.1's trim reaches the ends of each `;` part, not a break in the middle
+  of one, so a reader handed movetext directly (rather than through `parse`,
+  which joins lines) lost the move. Any whitespace now separates `best` from
+  its move. Reported by the Fianchetto Windows face.
+
 ## [0.11.1] — 2026-09-22
 
 Additive and behaviour fixes only; no source break.

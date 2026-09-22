@@ -44,4 +44,36 @@ final class PGNResultTerminationTests: XCTestCase {
         XCTAssertEqual(parsed.bestMove, "Nf3")
         XCTAssertEqual(parsed.comment, "solid")
     }
+
+    // A best move wrapped onto its OWN line is still the best move. The
+    // exporter wraps movetext at any space, inside braces too, so
+    // `{+0.34; best Qh5}` can come out as `{+0.34; best` and `Qh5}` on two
+    // lines. `parse` joins a file's lines before tokenizing, but a reader
+    // handed movetext directly does not, and trimming the ENDS of each `;`
+    // part cannot reach a break in the middle of one. Reported by the
+    // Fianchetto Windows face, 2026-09-22.
+    func testABestMoveWrappedOntoItsOwnLineIsStillTheBestMove() {
+        for separator in ["\n", "\r\n", "\t", "  "] {
+            let parsed = PGNParser.parseEngineComment("+0.34; best\(separator)Qh5")
+            XCTAssertEqual(parsed.bestMove, "Qh5", "separator \(separator.debugDescription)")
+            XCTAssertEqual(parsed.eval, "+0.34")
+            XCTAssertNil(parsed.comment)
+        }
+    }
+
+    func testAWordThatOnlyStartsWithBestIsStillProse() {
+        let parsed = PGNParser.parseEngineComment("bestiary; best")
+        XCTAssertNil(parsed.bestMove)
+        XCTAssertEqual(parsed.comment, "bestiary; best")
+    }
+
+    func testAWrappedBestMoveSurvivesTheTokenizer() throws {
+        let comments = PGNParser.tokenize("1. e4 {+0.34; best\nd4} e5").compactMap { token -> String? in
+            if case .comment(let text) = token { return text }
+            return nil
+        }
+        XCTAssertEqual(comments.count, 1)
+        let parsed = PGNParser.parseEngineComment(try XCTUnwrap(comments.first))
+        XCTAssertEqual(parsed.bestMove, "d4")
+    }
 }

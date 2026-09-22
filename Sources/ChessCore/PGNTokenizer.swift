@@ -705,8 +705,8 @@ public enum PGNParser {
         var commentParts: [String] = []
 
         for part in parts where !part.isEmpty {
-            if part.hasPrefix("best ") {
-                bestMove = String(part.dropFirst(5))
+            if let move = bestMoveText(part) {
+                bestMove = move
             } else if part.hasPrefix("+") || part.hasPrefix("-") || part.hasPrefix("0") || part.hasPrefix("M") {
                 // An evaluation is made only of digits, a decimal point, a
                 // sign, and the mate marker — AND must contain a digit. Without
@@ -734,6 +734,21 @@ public enum PGNParser {
 
         let comment = commentParts.isEmpty ? nil : commentParts.joined(separator: "; ")
         return (eval, bestMove, comment, clockSeconds)
+    }
+
+    /// The move after a leading `best`, or nil when `part` is not a best move.
+    ///
+    /// Any whitespace may separate the two, a line break included. The
+    /// exporter wraps movetext at any space, inside braces too, so
+    /// `{+0.34; best Qh5}` can come out as `best` and `Qh5` on two lines, and
+    /// trimming the ends of each part cannot reach a break in the middle of
+    /// one. A word that only starts with `best` ("bestiary") stays prose.
+    private static func bestMoveText(_ part: String) -> String? {
+        guard part.hasPrefix("best") else { return nil }
+        let rest = part.dropFirst(4)
+        guard let separator = rest.first, separator.isWhitespace else { return nil }
+        let move = rest.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+        return move.isEmpty ? nil : move
     }
 
     // Internal (not private) so the companion `PGN.swift` file's
