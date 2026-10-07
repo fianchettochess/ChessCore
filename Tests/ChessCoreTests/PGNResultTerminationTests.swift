@@ -4,6 +4,28 @@ import XCTest
 /// A game that ended off the board — resigned, flagged, agreed — has no
 /// `GameState` to say so; its result lives only in the Result tag.
 final class PGNResultTerminationTests: XCTestCase {
+    func testRulesResultWinsContradictoryTagInBothHeaderAndMovetext() throws {
+        let game = try XCTUnwrap(PGNParser.loadGame(from: "1. f3 e5 2. g4 Qh4# 0-1"))
+        for tagged in ["1-0", "1/2-1/2", "*", "invalid"] {
+            var tags = PGNGame.OrderedTags()
+            tags["Result"] = tagged
+            let pgn = PGNExporter.export(game: game, tags: tags)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            XCTAssertTrue(pgn.contains("[Result \"0-1\"]"))
+            XCTAssertTrue(pgn.hasSuffix("0-1"))
+            XCTAssertEqual(PGNParser.parse(pgn).first?.resultText, "0-1")
+        }
+    }
+
+    func testSuppliedSparseTagsDoNotFabricateResultMetadata() throws {
+        let game = try XCTUnwrap(resignedGame())
+        var tags = PGNGame.OrderedTags()
+        tags["Event"] = "Test"
+        let pgn = PGNExporter.export(game: game, tags: tags)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        XCTAssertFalse(pgn.contains("[Result "))
+        XCTAssertTrue(pgn.hasSuffix("*"))
+    }
 
     private func resignedGame() -> Game? {
         PGNParser.loadGame(from: "1. e4 e5 2. Qh5 Nc6 *")

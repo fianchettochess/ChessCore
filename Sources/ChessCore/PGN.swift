@@ -185,7 +185,14 @@ extension PGNExporter {
     public static func export(game: Game, tags: PGNGame.OrderedTags? = nil) -> String {
         var lines: [String] = []
 
-        let exportTags = tags ?? defaultTags(for: game)
+        var exportTags = tags ?? defaultTags(for: game)
+        // Resolve once for both header and movetext. Rules endings take
+        // precedence over contradictory supplied adjudication metadata;
+        // off-board endings retain a decided Result when the board is live.
+        let result = terminationToken(for: game, tags: exportTags)
+        // Supplied sparse tags stay sparse (lossless snapshot contract).
+        // Normalize an existing Result rather than fabricating a new header.
+        if exportTags["Result"] != nil { exportTags["Result"] = result }
 
         for key in exportTags.orderedKeys {
             if let value = exportTags[key] {
@@ -203,7 +210,7 @@ extension PGNExporter {
         let basePly = startPlyOffset(for: game.startPosition)
         var moveText = String()
         writeNodes(game.rootChildren, basePly: basePly, into: &moveText)
-        moveText += terminationToken(for: game, tags: exportTags)
+        moveText += result
         lines.append(wrapMoveText(moveText.trimmingCharacters(in: .whitespaces)))
 
         return lines.joined(separator: "\n")
