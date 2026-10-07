@@ -11,6 +11,17 @@ breaking `0.10.0`.
 
 Published tags are never moved or re-cut.
 
+## [0.11.3] — 2026-10-07
+
+A behaviour fix only; no source break.
+
+### Fixed
+
+- **PGN Result headers agree with the closing movetext token.** Rules endings
+  take precedence over contradictory supplied results; decided off-board
+  results still apply when the board cannot decide. Supplied sparse tags remain
+  sparse, preserving the lossless game-tree snapshot contract.
+
 ## [0.11.2] — 2026-09-22
 
 A behaviour fix only; no source break.
