@@ -304,7 +304,7 @@ extension PGNExporter {
         let hasClock = node.clockSeconds != nil
         guard hasEval || hasBest || hasComment || hasClock else { return }
 
-        result += "{"
+        var body = ""
 
         if let seconds = node.clockSeconds {
             let totalInt = Int(seconds)
@@ -313,17 +313,17 @@ extension PGNExporter {
             let fractional = seconds.truncatingRemainder(dividingBy: 1)
             if fractional > 0 {
                 let s = seconds - Double(h * 3600 + m * 60)
-                result += String(format: "[%%clk %d:%02d:%04.1f]", h, m, s)
+                body += String(format: "[%%clk %d:%02d:%04.1f]", h, m, s)
             } else {
                 let s = totalInt % 60
-                result += String(format: "[%%clk %d:%02d:%02d]", h, m, s)
+                body += String(format: "[%%clk %d:%02d:%02d]", h, m, s)
             }
         }
 
         var needsSeparator = node.clockSeconds != nil
 
         if let eval = node.engineEval {
-            if needsSeparator { result += " " }
+            if needsSeparator { body += " " }
             // THE SAME COMMAND SYNTAX THE CLOCK ABOVE ALREADY USES. This wrote
             // the evaluation bare — `{[%clk 0:03:00] +0.34}` — so the clock was
             // legible to every tool and the evaluation to none of them: Lichess,
@@ -337,30 +337,26 @@ extension PGNExporter {
             // The reader accepts both spellings, so files exported before today
             // — and every already-stored `moveText` — still parse unchanged.
             if let command = PGNParser.evalCommandArgument(for: eval) {
-                result += "[%eval \(command)]"
+                body += "[%eval \(command)]"
             } else {
-                result += eval
+                body += eval
             }
             needsSeparator = true
         }
 
         if let bestUCI = node.engineBestMoveUCI {
-            if needsSeparator { result += "; " }
+            if needsSeparator { body += "; " }
             let bestSAN = UCIParser.uciToSAN(bestUCI, in: node.positionBefore)
-            result += "best \(bestSAN ?? bestUCI)"
+            body += "best \(bestSAN ?? bestUCI)"
             needsSeparator = true
         }
 
         if let userComment = node.comment {
-            if needsSeparator { result += "; " }
-            // PGN has no escape for '}' — a bare '}' inside a comment
-            // block terminates the block early. Replace with ')' per
-            // convention (the PGN spec does not provide an escape
-            // sequence for this character).
-            result += userComment.replacingOccurrences(of: "}", with: ")")
+            if needsSeparator { body += "; " }
+            body += userComment
         }
 
-        result += "} "
+        result += commentText(body) + " "
     }
 
     /// PGN string-token escaping (§8.1 of the PGN spec): backslash must be
@@ -430,18 +426,27 @@ extension PGNExporter {
         var lines: [String] = []
         var currentLine = ""
 
-        for word in text.split(separator: " ") {
-            if currentLine.isEmpty {
-                currentLine = String(word)
-            } else if currentLine.count + 1 + word.count > lineLength {
-                lines.append(currentLine)
-                currentLine = String(word)
-            } else {
-                currentLine += " " + word
+        for line in text.split(omittingEmptySubsequences: false, whereSeparator: { $0.isNewline }) {
+            // Wrapping a semicolon comment would turn its continuation into
+            // moves. commentText always puts these comments on their own line.
+            if line.hasPrefix(";") {
+                lines.append(String(line))
+                continue
             }
-        }
-        if !currentLine.isEmpty {
-            lines.append(currentLine)
+            for word in line.split(separator: " ") {
+                if currentLine.isEmpty {
+                    currentLine = String(word)
+                } else if currentLine.count + 1 + word.count > lineLength {
+                    lines.append(currentLine)
+                    currentLine = String(word)
+                } else {
+                    currentLine += " " + word
+                }
+            }
+            if !currentLine.isEmpty {
+                lines.append(currentLine)
+                currentLine = ""
+            }
         }
 
         return lines.joined(separator: "\n") + "\n"

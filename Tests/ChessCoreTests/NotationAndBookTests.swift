@@ -378,7 +378,7 @@ final class NotationAndBookTests: XCTestCase {
         )
     }
 
-    // MARK: - PGN comment sanitization
+    // MARK: - PGN comment serialization
 
     /// A user comment containing '}' must not terminate the PGN comment block
     /// early on export — the move that follows the comment must still appear in
@@ -401,15 +401,16 @@ final class NotationAndBookTests: XCTestCase {
 
         let exported = PGNExporter.moveText(for: game.rootChildren)
 
-        // The '}' in the comment must be replaced with ')' so the comment
-        // block is terminated only by the exporter-appended '}'.
-        // The comment text "theory {engine agrees}" becomes "theory {engine agrees)".
-        XCTAssertTrue(exported.contains("engine agrees)"),
-                      "closing brace in comment text should be replaced with ')'; got: \(exported)")
-        XCTAssertFalse(exported.contains("agrees}"),
-                       "raw '}' after 'agrees' must not appear in the export")
-        XCTAssertTrue(exported.contains("e5"),
-                      "move after the comment must still be present in the output")
+        // A line comment preserves literal braces without ending early.
+        // Re-tokenize the actual output to prove e5 remains a move.
+        let tokens = PGNParser.tokenize(exported)
+        XCTAssertEqual(PGNParser.flatMoves(from: tokens), ["e4", "e5"])
+        let comments = tokens.compactMap { token -> String? in
+            if case .comment(let text) = token { return text }
+            return nil
+        }
+        XCTAssertEqual(comments, ["theory {engine agrees}"])
+
     }
 
     func testUCIInfoParsing() {
