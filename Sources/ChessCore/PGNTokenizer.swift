@@ -152,15 +152,16 @@ public enum PGNParser {
         // An overflowed game is discarded whole; returning its truncated prefix
         // would manufacture a valid-looking but incomplete game.
         var moveTextOverflow = false
+        var inBraceComment = false
 
         // stdlib split (Substrings share the parent buffer) instead of
         // Foundation `components(separatedBy: .newlines)` (a String copy per
-        // line + CharacterSet). CRLF yields one fewer empty subsequence, which
-        // the empty-line skip below absorbs.
+        // line + CharacterSet). Normalize physical newline dialects while
+        // retaining the boundaries required by semicolon comments.
         for line in pgn.split(omittingEmptySubsequences: false, whereSeparator: { $0.isNewline }) {
             let trimmed = line.trimmingCharacters(in: CharacterSet.whitespaces)
 
-            if trimmed.hasPrefix("[") && trimmed.hasSuffix("]") {
+            if !inBraceComment && trimmed.hasPrefix("[") && trimmed.hasSuffix("]") {
                 if !moveTextLines.isEmpty || moveTextOverflow {
                     if !moveTextOverflow {
                         let moveText = moveTextLines.joined(separator: "\n")
@@ -186,6 +187,20 @@ public enum PGNParser {
                 // the spec's blank separator line — hand-edited / concatenated
                 // PGNs often omit it. Previously such movetext was silently
                 // dropped (tags-only games) and consecutive games merged.
+                // A tag-shaped line inside a brace comment is prose. Track
+                // delimiters even after overflow so an embedded tag cannot
+                // manufacture a new record from a discarded game's comment.
+                // Semicolons end a physical line only outside brace comments;
+                // opening braces inside a brace comment do not nest.
+                for character in line {
+                    if inBraceComment {
+                        if character == "}" { inBraceComment = false }
+                    } else if character == "{" {
+                        inBraceComment = true
+                    } else if character == ";" {
+                        break
+                    }
+                }
                 if moveTextOverflow { continue }
                 let separatorBytes = moveTextLines.isEmpty ? 0 : 1
                 let nextLineBytes = line.utf8.count
