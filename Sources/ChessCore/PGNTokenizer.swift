@@ -163,11 +163,12 @@ public enum PGNParser {
             if trimmed.hasPrefix("[") && trimmed.hasSuffix("]") {
                 if !moveTextLines.isEmpty || moveTextOverflow {
                     if !moveTextOverflow {
-                        let moveText = moveTextLines.joined(separator: " ")
-                        let tokens = tokenize(moveText)
+                        let moveText = moveTextLines.joined(separator: "\n")
+                        let scanned = scan(moveText)
+                        let tokens = scanned.tokens
                         current.moves = flatMoves(from: tokens)
                         current.moveTokens = tokens
-                        current.result = extractResult(from: moveText)
+                        current.result = scanned.result
                         games.append(current)
                     }
                     current = PGNGame()
@@ -178,7 +179,7 @@ public enum PGNParser {
                 if let (key, value) = parseTag(trimmed) {
                     current.tags[key] = value
                 }
-            } else if trimmed.isEmpty {
+            } else if trimmed.isEmpty && moveTextLines.isEmpty {
                 continue
             } else {
                 // A non-empty, non-tag line ends the tag section even without
@@ -187,14 +188,14 @@ public enum PGNParser {
                 // dropped (tags-only games) and consecutive games merged.
                 if moveTextOverflow { continue }
                 let separatorBytes = moveTextLines.isEmpty ? 0 : 1
-                let nextLineBytes = trimmed.utf8.count
+                let nextLineBytes = line.utf8.count
                 if moveTextByteCount + separatorBytes + nextLineBytes > maximumMoveTextBytes {
                     moveTextOverflow = true
                     moveTextLines.removeAll(keepingCapacity: false)
                     moveTextByteCount = 0
                     continue
                 }
-                moveTextLines.append(trimmed)
+                moveTextLines.append(String(line))
                 moveTextByteCount += separatorBytes + nextLineBytes
             }
         }
@@ -203,11 +204,12 @@ public enum PGNParser {
             if moveTextLines.isEmpty && !current.tags.isEmpty {
                 current.diagnostics.append(.tagsOnlyRecord)
             }
-            let moveText = moveTextLines.joined(separator: " ")
-            let tokens = tokenize(moveText)
+            let moveText = moveTextLines.joined(separator: "\n")
+            let scanned = scan(moveText)
+            let tokens = scanned.tokens
             current.moves = flatMoves(from: tokens)
             current.moveTokens = tokens
-            current.result = extractResult(from: moveText)
+            current.result = scanned.result
             games.append(current)
         }
 
@@ -215,7 +217,15 @@ public enum PGNParser {
     }
 
     public static func tokenize(_ moveText: String) -> [PGNToken] {
+        scan(moveText).tokens
+    }
+
+    // Result markers must be read by the same lexer as moves: prose in either
+    // comment syntax, or a result inside a variation, cannot end the mainline.
+    private static func scan(_ moveText: String) -> (tokens: [PGNToken], result: String?) {
         var tokens: [PGNToken] = []
+        var result: String?
+        var variationDepth = 0
         var i = moveText.startIndex
 
         while i < moveText.endIndex {
@@ -223,9 +233,11 @@ public enum PGNParser {
 
             if ch == "(" {
                 tokens.append(.variationStart)
+                variationDepth += 1
                 i = moveText.index(after: i)
             } else if ch == ")" {
                 tokens.append(.variationEnd)
+                variationDepth = max(0, variationDepth - 1)
                 i = moveText.index(after: i)
             } else if ch == "{" {
                 let start = moveText.index(after: i)
@@ -236,18 +248,27 @@ public enum PGNParser {
                 } else {
                     i = moveText.endIndex
                 }
+            } else if ch == ";" {
+                let start = moveText.index(after: i)
+                i = start
+                while i < moveText.endIndex && !moveText[i].isNewline {
+                    i = moveText.index(after: i)
+                }
+                tokens.append(.comment(String(moveText[start..<i])))
             } else if ch.isWhitespace {
                 i = moveText.index(after: i)
             } else {
                 let start = i
                 while i < moveText.endIndex && !moveText[i].isWhitespace
-                    && moveText[i] != "(" && moveText[i] != ")" && moveText[i] != "{" {
+                    && moveText[i] != "(" && moveText[i] != ")" && moveText[i] != "{" && moveText[i] != ";" {
                     i = moveText.index(after: i)
                 }
                 let word = String(moveText[start..<i])
                 if word.hasPrefix("$"), let nagNumber = Int(word.dropFirst()) {
                     tokens.append(.nag(nagNumber))
-                } else if !isResult(word) {
+                } else if isResult(word) {
+                    if variationDepth == 0 { result = word }
+                } else {
                     let stripped = stripMoveNumberPrefix(word)
                     if !stripped.isEmpty {
                         tokens.append(.move(stripped))
@@ -256,7 +277,7 @@ public enum PGNParser {
             }
         }
 
-        return tokens
+        return (tokens, result)
     }
 
     public static func flatMoves(from tokens: [PGNToken]) -> [String] {
@@ -816,12 +837,6 @@ public enum PGNParser {
         return (key, value)
     }
 
-    private static func extractResult(from text: String) -> String? {
-        let results = ["1-0", "0-1", "1/2-1/2", "*"]
-        let tokens = text.split(separator: " ").map(String.init)
-        return tokens.last(where: { results.contains($0) })
-    }
-
     private static func isResult(_ token: String) -> Bool {
         ["1-0", "0-1", "1/2-1/2", "*"].contains(token)
     }
@@ -850,6 +865,15 @@ public enum PGNParser {
 
 public enum PGNExporter {
 
+    /// Brace comments cannot escape a closing brace. Such prose is safe in a
+    /// semicolon comment on its own line; keep its terminating newline so the
+    /// next move or variation delimiter cannot become part of the comment.
+    static func commentText(_ text: String) -> String {
+        guard text.contains("}") else { return "{\(text)}" }
+        let lines = text.split(omittingEmptySubsequences: false, whereSeparator: { $0.isNewline })
+        return "\n" + lines.map { ";" + $0 }.joined(separator: "\n") + "\n"
+    }
+
     public static func tokenText(from pgnGame: PGNGame) -> String {
         if !pgnGame.moveTokens.isEmpty {
             return pgnGame.moveTokens.map { token in
@@ -857,7 +881,7 @@ public enum PGNExporter {
                 case .move(let san): san
                 case .variationStart: "("
                 case .variationEnd: ")"
-                case .comment(let text): "{\(text)}"
+                case .comment(let text): commentText(text)
                 case .nag(let n): "$\(n)"
                 }
             }.joined(separator: " ")
