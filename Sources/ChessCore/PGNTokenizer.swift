@@ -318,8 +318,11 @@ public enum PGNParser {
     /// regenerate it. Identical result to `parseMove(_:in:)`, which delegates
     /// here with a freshly generated list.
     public static func parseMove(_ san: String, in position: Position, legalMoves: [Move]) -> Move? {
-        let cleaned = String(san.filter { $0 != "+" && $0 != "#" && $0 != "!" && $0 != "?" })
-            .trimmingCharacters(in: CharacterSet.whitespaces)
+        // Check and quality marks only ever trail a move.
+        var cleaned = san.trimmingCharacters(in: CharacterSet.whitespaces)
+        while let last = cleaned.last, "+#!?".contains(last) {
+            cleaned.removeLast()
+        }
 
         if cleaned == "O-O" || cleaned == "0-0" {
             let rank = position.activeColor == .white ? 0 : 7
@@ -346,7 +349,12 @@ public enum PGNParser {
                 // out-of-bounds subscript.
                 return nil
             }
-            promotion = pieceTypeFromChar(remaining[afterEq])
+            // Exactly one piece letter; "e4=Z" and "a8=Qxyz" are not moves.
+            guard remaining.index(after: afterEq) == remaining.endIndex,
+                  let promoted = pieceTypeFromChar(remaining[afterEq]) else {
+                return nil
+            }
+            promotion = promoted
             remaining = String(remaining[remaining.startIndex..<eqIdx])
         }
 
@@ -375,26 +383,37 @@ public enum PGNParser {
 
         guard let firstChar = remaining.first else { return nil }
         if firstChar.isUppercase {
-            pieceType = pieceTypeFromChar(firstChar) ?? .pawn
+            // "P" and unknown letters are not SAN. Falling through to a pawn
+            // would replay a different game from the one the PGN describes.
+            guard let piece = pieceTypeFromChar(firstChar) else { return nil }
+            pieceType = piece
             remaining = String(remaining.dropFirst())
         }
 
-        remaining.removeAll { $0 == "x" }  // Foundation-free; avoids an intermediate string.
-
         guard remaining.count >= 2 else { return nil }
 
-        let targetAlgebraic = String(remaining.suffix(2))
-        let disambig = String(remaining.dropLast(2))
+        guard let target = Square(algebraic: String(remaining.suffix(2))) else { return nil }
 
-        guard let target = Square(algebraic: targetAlgebraic) else { return nil }
-
-        for char in disambig {
-            if char >= "a" && char <= "h", let ascii = char.asciiValue {
-                disambigFile = Int(ascii) - 97
-            } else if char >= "1" && char <= "8", let ascii = char.asciiValue {
-                disambigRank = Int(ascii) - 49
-            }
+        // Between the piece letter and the target: an optional origin file,
+        // an optional origin rank, then an optional "x" or long-algebraic "-".
+        // Nothing else is skipped, so a lowercase piece letter ("nf3") or
+        // other junk fails here instead of reading as a pawn move to the
+        // same square.
+        var origin = remaining.dropLast(2)
+        let separator = origin.last == "x" || origin.last == "-" ? origin.popLast() : nil
+        let hasOrigin = !origin.isEmpty
+        if let ascii = origin.first?.asciiValue, ascii >= 97, ascii <= 104 {
+            disambigFile = Int(ascii) - 97
+            origin.removeFirst()
         }
+        if let ascii = origin.first?.asciiValue, ascii >= 49, ascii <= 56 {
+            disambigRank = Int(ascii) - 49
+            origin.removeFirst()
+        }
+        guard origin.isEmpty else { return nil }
+        if separator == "-", disambigFile == nil || disambigRank == nil { return nil }
+        // A pawn is named by its file: "2e4" and "xe4" are not pawn moves.
+        if pieceType == .pawn, hasOrigin || separator != nil, disambigFile == nil { return nil }
 
         let candidates = legalMoves.filter { move in
             guard move.piece == pieceType, move.to == target else { return false }

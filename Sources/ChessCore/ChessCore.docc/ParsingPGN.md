@@ -135,7 +135,8 @@ a board directly — use ``PGNParser/parseMove(_:in:)``. It handles
 castling (`O-O` / `0-0`), promotion (`=Q`), disambiguation, and captures.
 Parsing fails when the supplied SAN does not identify exactly one legal move;
 in particular, required piece disambiguation and promotion suffixes are never
-inferred from move-generator order:
+inferred from move-generator order. Tokens that are not SAN, such as a lowercase
+piece letter (`nf3`), are rejected rather than read as a pawn move:
 
 ```swift
 var position = Position.initial()
