@@ -11,6 +11,43 @@ breaking `0.10.0`.
 
 Published tags are never moved or re-cut.
 
+## [0.12.0] — 2026-10-31
+
+Source-breaking only in a new public `PGNDiagnostic` case. Stored PGN stays
+readable; some generated text and some lenient parsing change, as noted.
+
+### Added
+
+- **`PGNDiagnostic.unterminatedBraceComment`**, set when a `{` comment never
+  closes, including one that runs to the end of the file.
+
+### Changed
+
+- **Generated SAN marks castling that gives check or mate** (`O-O+`, `O-O-O#`).
+  Text a consumer regenerates can therefore differ from text it stored, so
+  compare moves rather than raw tokens.
+- **Nested variations export after their move**, so a depth-2 or deeper tree
+  round-trips. Old-order text still reads correctly when its nested line replays
+  only from the old position; a line legal from both stays in the standard place.
+- **`PGNParser.parseMove` follows a strict grammar.** Lowercase or unknown piece
+  letters, stray `x`, and junk after `=` no longer resolve to a move. An explicit
+  `P`, ChessUp coordinates and hyphenated long algebraic still parse.
+- **The throwing `loadGame` reports an unreadable main-line move** as
+  `unparseableMainlineMove`. The lenient overloads still skip it and continue.
+  A bad token in a variation now drops the rest of that variation.
+- **Detached markup is passed over on every path**: `!`, `...`, `e.p.`, `+=`,
+  `+-`, `=`, `N`, `±` and `ep`. The snapshot path used to discard such games.
+
+### Fixed
+
+- A column-0 `[Event` line after a blank line ends a comment that never closes,
+  so later records are no longer swallowed.
+- Non-finite, negative or absurd clock readings are dropped on parse and restore
+  and omitted on export, instead of trapping.
+- Huge FEN counters no longer trap. They stay as written, and moves saturate.
+- `Game.exportPGN` and `MoveNode.isOnMainLine` no longer overflow the stack on
+  a line at the node limit.
+
 ## [0.11.3] — 2026-10-07
 
 A behaviour fix only; no source break.
