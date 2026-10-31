@@ -441,6 +441,14 @@ public enum PGNParser {
         return nil
     }
 
+    /// Whether a movetext word, with any quality mark already removed, marks up
+    /// the previous move rather than being one: a detached `!`, the `...` of
+    /// `1. ... e5`, or `e.p.` after an en passant capture. Passing over these
+    /// leaves the replay on the right board, unlike an unreadable move.
+    static func isMoveTextNoise(_ cleanedSan: String) -> Bool {
+        cleanedSan.isEmpty || cleanedSan == "e.p." || cleanedSan.allSatisfy { $0 == "." }
+    }
+
     /// Resolve the starting position shared by snapshot and live-tree PGN
     /// materialization. `nil` means a non-empty FEN tag was invalid.
     static func startingPosition(for pgnGame: PGNGame) -> Position? {
@@ -516,6 +524,7 @@ public enum PGNParser {
             case .move(let san):
                 guard variationDepth == 0 else { continue }
                 let (cleanedSan, annotation) = MoveAnnotation.extract(from: san)
+                if isMoveTextNoise(cleanedSan) { continue }
                 // Generate the legal-move list once for both the SAN parse and
                 // the canonical-notation derivation.
                 let legal = MoveGenerator.legalMoves(for: position)

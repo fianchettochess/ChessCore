@@ -19,21 +19,43 @@ extension PGNParser {
         return loadGame(from: pgnGame)
     }
 
+    /// Lenient materialization, which stored games rely on to stay openable.
+    ///
+    /// A main-line token that cannot be played is passed over without a
+    /// diagnostic, so the result may not be the game that was written. Use
+    /// ``loadGame(from:maximumTreeNodes:)`` or ``parseMainLineSnapshot(from:pliesLimit:)``
+    /// to learn that a game has such a token.
     public static func loadGame(from pgnGame: PGNGame) -> Game? {
-        try? loadGame(
-            from: pgnGame,
-            maximumTreeNodes: maximumMoveTreeNodes
+        try? materialize(
+            pgnGame,
+            maximumTreeNodes: maximumMoveTreeNodes,
+            rejectsUnparseableMainLine: false
         )
     }
 
     /// Materialize one parsed PGN with an explicit whole-tree resource budget.
     ///
     /// Unlike the compatibility overload, this surface reports a limit breach
-    /// as ``PGNDiagnostic/moveTreeNodeLimitExceeded(maximumNodes:)``. No partial
-    /// game escapes: the local tree is released as the error unwinds.
+    /// as ``PGNDiagnostic/moveTreeNodeLimitExceeded(maximumNodes:)`` and a
+    /// main-line token it cannot play as
+    /// ``PGNDiagnostic/unparseableMainlineMove(san:plyIndex:)``, the same
+    /// diagnostic the snapshot path reports. No partial game escapes: the local
+    /// tree is released as the error unwinds.
     public static func loadGame(
         from pgnGame: PGNGame,
         maximumTreeNodes: Int
+    ) throws -> Game {
+        try materialize(
+            pgnGame,
+            maximumTreeNodes: maximumTreeNodes,
+            rejectsUnparseableMainLine: true
+        )
+    }
+
+    private static func materialize(
+        _ pgnGame: PGNGame,
+        maximumTreeNodes: Int,
+        rejectsUnparseableMainLine: Bool
     ) throws -> Game {
         // A non-positive node budget admits no tree at all; surface it as a
         // catchable diagnostic rather than trapping a public throwing API.
@@ -56,7 +78,14 @@ extension PGNParser {
         if pgnGame.moveTokens.isEmpty {
             var materializedNodeCount = 0
             for san in pgnGame.moves {
+                if isMoveTextNoise(MoveAnnotation.extract(from: san).cleaned) { continue }
                 guard let move = parseMove(san, in: game.position) else {
+                    if rejectsUnparseableMainLine {
+                        throw PGNDiagnostic.unparseableMainlineMove(
+                            san: MoveAnnotation.extract(from: san).cleaned,
+                            plyIndex: materializedNodeCount
+                        )
+                    }
                     return game
                 }
                 guard materializedNodeCount < maximumTreeNodes else {
@@ -71,7 +100,8 @@ extension PGNParser {
             try buildTree(
                 game: game,
                 tokens: pgnGame.moveTokens,
-                maximumNodes: maximumTreeNodes
+                maximumNodes: maximumTreeNodes,
+                rejectsUnparseableMainLine: rejectsUnparseableMainLine
             )
         }
 
@@ -81,7 +111,8 @@ extension PGNParser {
     private static func buildTree(
         game: Game,
         tokens: [PGNToken],
-        maximumNodes: Int
+        maximumNodes: Int,
+        rejectsUnparseableMainLine: Bool
     ) throws {
         var nodeStack: [MoveNode?] = [nil]
         // Parallel to `nodeStack`: the frame's next move continues a line whose
@@ -89,11 +120,20 @@ extension PGNParser {
         var continuationIsPending = [false]
         let nestedLines = nestedVariationMoves(in: tokens)
         var materializedNodeCount = 0
+        // Open parentheses in the variation being abandoned, its own included.
+        // Its own close still reaches the switch, to pop its frame.
+        var abandonedDepth = 0
 
         for (tokenIndex, token) in tokens.enumerated() {
+            if abandonedDepth > 0 {
+                if case .variationStart = token { abandonedDepth += 1 }
+                if case .variationEnd = token { abandonedDepth -= 1 }
+                if abandonedDepth > 0 { continue }
+            }
             switch token {
             case .move(let san):
                 let (cleanedSan, annotation) = MoveAnnotation.extract(from: san)
+                if isMoveTextNoise(cleanedSan) { continue }
                 let currentPos: Position
                 if let last = nodeStack.last, let node = last {
                     currentPos = node.positionAfter
@@ -103,7 +143,19 @@ extension PGNParser {
                 // Generate the legal-move list ONCE and thread it into both the
                 // SAN parse and the canonical-notation derivation.
                 let legal = MoveGenerator.legalMoves(for: currentPos)
-                guard let move = parseMove(cleanedSan, in: currentPos, legalMoves: legal) else { continue }
+                guard let move = parseMove(cleanedSan, in: currentPos, legalMoves: legal) else {
+                    // The rest of a variation depends on the move it could not
+                    // read, so replaying it would invent a line.
+                    if nodeStack.count > 1 {
+                        abandonedDepth = 1
+                    } else if rejectsUnparseableMainLine {
+                        throw PGNDiagnostic.unparseableMainlineMove(
+                            san: cleanedSan,
+                            plyIndex: (nodeStack.last??.plyIndex ?? -1) + 1
+                        )
+                    }
+                    continue
+                }
 
                 let parentNode = nodeStack.last ?? nil
                 let siblings = parentNode?.children ?? game.rootChildren

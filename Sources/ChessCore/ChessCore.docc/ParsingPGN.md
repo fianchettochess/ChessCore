@@ -115,8 +115,10 @@ let snapshot = await Task.detached(priority: .userInitiated) {
 ## Materialize a live move tree
 
 ``PGNParser``'s `loadGame(from:)` overloads build a live ``Game`` and apply the
-default whole-tree node budget, including variations. Code that needs a
-specific budget and an explicit failure reason can use
+default whole-tree node budget, including variations. They are lenient, so
+stored games stay openable: a main-line token that cannot be played is passed
+over without a diagnostic. Code that needs a specific budget and an explicit
+failure reason can use
 ``PGNParser/loadGame(from:maximumTreeNodes:)``:
 
 ```swift
@@ -125,6 +127,8 @@ do {
     // Use game.
 } catch PGNDiagnostic.moveTreeNodeLimitExceeded(let maximumNodes) {
     print("PGN tree exceeds the \(maximumNodes)-node budget")
+} catch PGNDiagnostic.unparseableMainlineMove(let san, let plyIndex) {
+    print("Could not read \(san) at ply \(plyIndex)")
 }
 ```
 
