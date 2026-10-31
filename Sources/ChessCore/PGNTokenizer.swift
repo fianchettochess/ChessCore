@@ -485,11 +485,20 @@ public enum PGNParser {
 
     /// Whether a movetext word, with any quality mark already removed, marks up
     /// the previous move rather than being one: a detached `!`, the `...` of
-    /// `1. ... e5`, or `e.p.` after an en passant capture. Passing over these
-    /// leaves the replay on the right board, unlike an unreadable move.
+    /// `1. ... e5`, `e.p.` after an en passant capture, or an evaluation glyph
+    /// such as `+=` or the novelty `N`, which annotated books write as words.
+    /// Passing over these leaves the replay on the right board, unlike an
+    /// unreadable move.
     static func isMoveTextNoise(_ cleanedSan: String) -> Bool {
-        cleanedSan.isEmpty || cleanedSan == "e.p." || cleanedSan.allSatisfy { $0 == "." }
+        cleanedSan.isEmpty || cleanedSan.allSatisfy { $0 == "." } || moveTextMarkup.contains(cleanedSan)
     }
+
+    private static let moveTextMarkup: Set<String> = [
+        "e.p.", "e.p", "ep", "\u{2026}",
+        "+", "#", "=", "+=", "=+", "+/=", "=/+", "+/-", "-/+", "+-", "-+",
+        "\u{221E}", "\u{00B1}", "\u{2213}", "\u{2A72}", "\u{2A71}", "\u{25A1}",
+        "N", "D",
+    ]
 
     /// Resolve the starting position shared by snapshot and live-tree PGN
     /// materialization. `nil` means a non-empty FEN tag was invalid.

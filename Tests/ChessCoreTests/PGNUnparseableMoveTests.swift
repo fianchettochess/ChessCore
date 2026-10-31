@@ -49,6 +49,28 @@ struct PGNUnparseableMoveTests {
         #expect(try PGNParser.loadGame(from: game, maximumTreeNodes: 100).mainLine.map(\.notation) == ["e4", "e5", "Nf3"])
     }
 
+    @Test("Evaluation glyphs written as words keep a variation and the game", arguments: ["+=", "+-", "=", "N"])
+    func detachedGlyphKeepsTheLine(glyph: String) throws {
+        // Annotation writes this tree back over the stored text, so losing the
+        // rest of a variation to a glyph would delete it from the library.
+        let game = try parsed("1. e4 \(glyph) e5 (1... c5 \(glyph) 2. Nf3 d6) 2. Nf3 *")
+        let snapshot = PGNParser.parseMainLineSnapshot(from: game)
+        #expect(snapshot.diagnostics.isEmpty)
+        #expect(snapshot.moves.map(\.notation) == ["e4", "e5", "Nf3"])
+        let loaded = try PGNParser.loadGame(from: game, maximumTreeNodes: 100)
+        let variation = loaded.mainLine[0].children[1]
+        #expect(variation.notation == "c5")
+        #expect(variation.children.first?.children.first?.notation == "d6")
+    }
+
+    @Test("Markup does not hide a nested line stored in the old exporter order")
+    func markupInOldOrderNestedLine() throws {
+        let game = try parsed("1. e4 e5 2. Nf3 ( 2. Bc4 ( 2... Bc5 += 3. c3 ) 2... Nf6 ) *")
+        let bishop = try #require(PGNParser.loadGame(from: game)?.mainLine[1].children[1])
+        #expect(bishop.children.map(\.notation) == ["Nf6", "Bc5"])
+        #expect(bishop.children[1].children.first?.notation == "c3")
+    }
+
     @Test("An en passant suffix does not end the game")
     func enPassantSuffixKeepsTheGame() throws {
         let game = try parsed("1. e4 d5 2. e5 f5 3. exf6 e.p. Nxf6 *")

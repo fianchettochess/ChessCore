@@ -290,6 +290,7 @@ extension PGNParser {
         var position = start
         for san in line {
             let (cleanedSan, _) = MoveAnnotation.extract(from: san)
+            if isMoveTextNoise(cleanedSan) { continue }
             guard let move = parseMove(cleanedSan, in: position) else { return false }
             MoveGenerator.applyMoveUnchecked(&position, move)
         }
