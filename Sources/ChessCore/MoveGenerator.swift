@@ -153,7 +153,7 @@ public enum MoveGenerator {
 
     public static func algebraicNotation(for move: Move, in position: Position, legalMoves allLegal: [Move]? = nil) -> String {
         if move.isCastling {
-            return move.to.file == 6 ? "O-O" : "O-O-O"
+            return (move.to.file == 6 ? "O-O" : "O-O-O") + checkSuffix(for: move, in: position)
         }
 
         var notation = ""
@@ -198,13 +198,16 @@ public enum MoveGenerator {
             notation += "=\(pieceSymbol(promo))"
         }
 
+        return notation + checkSuffix(for: move, in: position)
+    }
+
+    private static func checkSuffix(for move: Move, in position: Position) -> String {
         var newPos = position
         applyMoveUnchecked(&newPos, move)
-        if isSquareAttacked(findKing(in: newPos, color: newPos.activeColor), by: position.activeColor, in: newPos) {
-            notation += hasAnyLegalMove(for: newPos) ? "+" : "#"
+        guard isSquareAttacked(findKing(in: newPos, color: newPos.activeColor), by: position.activeColor, in: newPos) else {
+            return ""
         }
-
-        return notation
+        return hasAnyLegalMove(for: newPos) ? "+" : "#"
     }
 
     // MARK: - Helpers
