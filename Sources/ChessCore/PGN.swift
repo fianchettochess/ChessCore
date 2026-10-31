@@ -84,9 +84,13 @@ extension PGNParser {
         maximumNodes: Int
     ) throws {
         var nodeStack: [MoveNode?] = [nil]
+        // Parallel to `nodeStack`: the frame's next move continues a line whose
+        // alternatives were read first (see `opensAfterLastMove`).
+        var continuationIsPending = [false]
+        let nestedLines = nestedVariationMoves(in: tokens)
         var materializedNodeCount = 0
 
-        for token in tokens {
+        for (tokenIndex, token) in tokens.enumerated() {
             switch token {
             case .move(let san):
                 let (cleanedSan, annotation) = MoveAnnotation.extract(from: san)
@@ -104,6 +108,15 @@ extension PGNParser {
                 let parentNode = nodeStack.last ?? nil
                 let siblings = parentNode?.children ?? game.rootChildren
                 let ply = (parentNode?.plyIndex ?? -1) + 1
+                defer {
+                    if continuationIsPending[continuationIsPending.count - 1] {
+                        continuationIsPending[continuationIsPending.count - 1] = false
+                        if let parentNode, let placed = nodeStack[nodeStack.count - 1],
+                           let index = parentNode.children.firstIndex(where: { $0 === placed }) {
+                            parentNode.children.insert(parentNode.children.remove(at: index), at: 0)
+                        }
+                    }
+                }
 
                 if let existing = siblings.first(where: { $0.move == move }) {
                     if let annotation { existing.annotation = annotation }
@@ -134,11 +147,19 @@ extension PGNParser {
             case .variationStart:
                 let currentNode = nodeStack.last ?? nil
                 let branchPoint = currentNode?.parent
-                nodeStack.append(branchPoint)
+                if let currentNode, let line = nestedLines[tokenIndex],
+                   opensAfterLastMove(line, lastMove: currentNode, startPosition: game.startPosition) {
+                    continuationIsPending[continuationIsPending.count - 1] = true
+                    nodeStack.append(currentNode)
+                } else {
+                    nodeStack.append(branchPoint)
+                }
+                continuationIsPending.append(false)
 
             case .variationEnd:
                 if nodeStack.count > 1 {
                     nodeStack.removeLast()
+                    continuationIsPending.removeLast()
                 }
 
             case .comment(let text):
@@ -171,6 +192,56 @@ extension PGNParser {
         if let lastNode = mainLine.last {
             game.navigateToNode(lastNode)
         }
+    }
+
+    /// The moves each nested variation plays at its own level, keyed by the
+    /// index of its opening token. One pass, so hostile nesting stays linear.
+    private static func nestedVariationMoves(in tokens: [PGNToken]) -> [Int: [String]] {
+        var moves: [Int: [String]] = [:]
+        var openVariations: [Int] = []
+        for (index, token) in tokens.enumerated() {
+            switch token {
+            case .variationStart:
+                openVariations.append(index)
+                if openVariations.count >= 2 { moves[index] = [] }
+            case .variationEnd:
+                _ = openVariations.popLast()
+            case .move(let san):
+                if openVariations.count >= 2, let open = openVariations.last {
+                    moves[open, default: []].append(san)
+                }
+            case .comment, .nag:
+                break
+            }
+        }
+        return moves
+    }
+
+    /// Whether a nested variation was stored by an exporter that wrote a line's
+    /// alternatives ahead of the move they replace, so it starts from the
+    /// position after `lastMove` rather than from `lastMove`'s parent. Library
+    /// rows keep only this text, and those variations are recoverable from it.
+    ///
+    /// Move numbers do not survive tokenizing, and SAN carries no colour, so the
+    /// whole line has to replay. Standard PGN wins whenever it replays, which
+    /// leaves a stored line that is legal from both positions in standard place.
+    private static func opensAfterLastMove(
+        _ line: [String],
+        lastMove: MoveNode,
+        startPosition: Position
+    ) -> Bool {
+        let standardStart = lastMove.parent?.positionAfter ?? startPosition
+        return !replays(line, from: standardStart) && replays(line, from: lastMove.positionAfter)
+    }
+
+    private static func replays(_ line: [String], from start: Position) -> Bool {
+        var position = start
+        for san in line {
+            let (cleanedSan, _) = MoveAnnotation.extract(from: san)
+            guard let move = parseMove(cleanedSan, in: position) else { return false }
+            MoveGenerator.applyMoveUnchecked(&position, move)
+        }
+        return !line.isEmpty
     }
 }
 
@@ -266,15 +337,18 @@ extension PGNExporter {
         }
         writeSingleNode(node, basePly: basePly, into: &result, afterVariation: false)
 
+        // The move first, then its alternatives: a reader branches a variation
+        // from the parent of the move just written.
+        var afterVariation = false
         var current = node
         while let next = current.children.first {
-            let hasVariations = current.children.count > 1
+            writeSingleNode(next, basePly: basePly, into: &result, afterVariation: afterVariation)
             for variation in current.children.dropFirst() {
                 result += "( "
                 writeLine(from: variation, basePly: basePly, into: &result, depth: depth + 1)
                 result += ") "
             }
-            writeSingleNode(next, basePly: basePly, into: &result, afterVariation: hasVariations)
+            afterVariation = current.children.count > 1
             current = next
         }
     }
