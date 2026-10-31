@@ -48,6 +48,14 @@ struct PGNStrictSANTests {
         #expect(PGNParser.parseMove("e+4", in: .initial()) == nil)
     }
 
+    @Test("An explicit pawn letter still reads as that pawn move")
+    func explicitPawnLetter() throws {
+        #expect(PGNParser.parseMove("Pe4", in: .initial())?.uci == "e2e4")
+        #expect(PGNParser.parseMove("Pe2e4", in: .initial())?.uci == "e2e4")
+        let capture = try #require(Position(fen: "4k3/8/8/3p4/4P3/8/8/4K3 w - - 0 1"))
+        #expect(PGNParser.parseMove("Pxd5", in: capture)?.uci == "e4d5")
+    }
+
     @Test("A PGN with a lowercase piece letter reports it instead of playing a pawn")
     func importReportsLowercasePieceLetter() {
         let parsed = PGNParser.mainLineSnapshot(fromMoveText: "1. nf3 d5 *")

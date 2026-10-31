@@ -423,12 +423,18 @@ public enum PGNParser {
             }
         }
 
+        var namesPawn = false
         guard let firstChar = remaining.first else { return nil }
         if firstChar.isUppercase {
-            // "P" and unknown letters are not SAN. Falling through to a pawn
-            // would replay a different game from the one the PGN describes.
-            guard let piece = pieceTypeFromChar(firstChar) else { return nil }
-            pieceType = piece
+            // An explicit "P" names a pawn, which some older tools write. An
+            // unknown letter must not fall through to a pawn: that would replay
+            // a different game from the one the PGN describes.
+            if firstChar == "P" {
+                namesPawn = true
+            } else {
+                guard let piece = pieceTypeFromChar(firstChar) else { return nil }
+                pieceType = piece
+            }
             remaining = String(remaining.dropFirst())
         }
 
@@ -454,8 +460,8 @@ public enum PGNParser {
         }
         guard origin.isEmpty else { return nil }
         if separator == "-", disambigFile == nil || disambigRank == nil { return nil }
-        // A pawn is named by its file: "2e4" and "xe4" are not pawn moves.
-        if pieceType == .pawn, hasOrigin || separator != nil, disambigFile == nil { return nil }
+        // Without a "P", a file is what names a pawn: "2e4" and "xe4" are not moves.
+        if pieceType == .pawn, !namesPawn, hasOrigin || separator != nil, disambigFile == nil { return nil }
 
         let candidates = legalMoves.filter { move in
             guard move.piece == pieceType, move.to == target else { return false }
