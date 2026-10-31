@@ -366,19 +366,21 @@ extension PGNExporter {
     /// that branch — the rest of the document still exports cleanly.
     private static let maxVariationDepth = 64
 
+    /// Loops down the main line rather than recursing: a line can be
+    /// `maximumMoveTreeNodes` long, and exports run on background threads with
+    /// small stacks.
     private static func writeNodes(_ children: [MoveNode], basePly: Int, into result: inout String) {
-        guard let mainNode = children.first else { return }
+        var siblings = children
+        while let mainNode = siblings.first {
+            writeSingleNode(mainNode, basePly: basePly, into: &result, afterVariation: false)
 
-        writeSingleNode(mainNode, basePly: basePly, into: &result, afterVariation: false)
+            for variation in siblings.dropFirst() {
+                result += "( "
+                writeLine(from: variation, basePly: basePly, into: &result, depth: 1)
+                result += ") "
+            }
 
-        for variation in children.dropFirst() {
-            result += "( "
-            writeLine(from: variation, basePly: basePly, into: &result, depth: 1)
-            result += ") "
-        }
-
-        if !mainNode.children.isEmpty {
-            writeNodes(mainNode.children, basePly: basePly, into: &result)
+            siblings = mainNode.children
         }
     }
 
