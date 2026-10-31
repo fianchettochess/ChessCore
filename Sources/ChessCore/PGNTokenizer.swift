@@ -7,6 +7,8 @@ import Foundation
 public enum PGNDiagnostic: Error, Equatable, Sendable {
     /// A tag roster was present but the record contained no movetext at all.
     case tagsOnlyRecord
+    /// A `{` comment was never closed, so the record's movetext stops at it.
+    case unterminatedBraceComment
     /// A supplied FEN tag could not be parsed, so no moves were interpreted.
     case invalidFEN(String)
     /// A main-line SAN token could not be applied at the expected ply.
@@ -153,13 +155,30 @@ public enum PGNParser {
         // would manufacture a valid-looking but incomplete game.
         var moveTextOverflow = false
         var inBraceComment = false
+        var previousLineWasBlank = false
+        var commentClosesOnLine = -1
 
         // stdlib split (Substrings share the parent buffer) instead of
         // Foundation `components(separatedBy: .newlines)` (a String copy per
         // line + CharacterSet). Normalize physical newline dialects while
         // retaining the boundaries required by semicolon comments.
-        for line in pgn.split(omittingEmptySubsequences: false, whereSeparator: { $0.isNewline }) {
+        let lines = pgn.split(omittingEmptySubsequences: false, whereSeparator: { $0.isNewline })
+        for (lineIndex, line) in lines.enumerated() {
             let trimmed = line.trimmingCharacters(in: CharacterSet.whitespaces)
+            defer { previousLineWasBlank = trimmed.isEmpty }
+
+            // A stray `{` must not swallow every later game. A record opening
+            // after a blank line ends the comment, unless the comment does go
+            // on to close: then that record is quoted prose. Remembering the
+            // closing line keeps a comment quoting many records linear.
+            if inBraceComment, previousLineWasBlank, lineIndex > commentClosesOnLine,
+               line.hasPrefix("[Event "), trimmed.hasSuffix("]") {
+                if let closingLine = closingBraceLine(in: lines, from: lineIndex) {
+                    commentClosesOnLine = closingLine
+                } else {
+                    inBraceComment = false
+                }
+            }
 
             if !inBraceComment && trimmed.hasPrefix("[") && trimmed.hasSuffix("]") {
                 if !moveTextLines.isEmpty || moveTextOverflow {
@@ -170,6 +189,9 @@ public enum PGNParser {
                         current.moves = flatMoves(from: tokens)
                         current.moveTokens = tokens
                         current.result = scanned.result
+                        if scanned.hasUnterminatedComment {
+                            current.diagnostics.append(.unterminatedBraceComment)
+                        }
                         games.append(current)
                     }
                     current = PGNGame()
@@ -225,10 +247,26 @@ public enum PGNParser {
             current.moves = flatMoves(from: tokens)
             current.moveTokens = tokens
             current.result = scanned.result
+            if scanned.hasUnterminatedComment {
+                current.diagnostics.append(.unterminatedBraceComment)
+            }
             games.append(current)
         }
 
         return games
+    }
+
+    /// The line holding the next brace from `start` if that brace closes a
+    /// comment. Nil if the next brace opens one or no brace follows, which
+    /// means the comment already open at `start` is never closed.
+    private static func closingBraceLine(in lines: [Substring], from start: Int) -> Int? {
+        for index in start..<lines.count {
+            for byte in lines[index].utf8 {
+                if byte == UInt8(ascii: "}") { return index }
+                if byte == UInt8(ascii: "{") { return nil }
+            }
+        }
+        return nil
     }
 
     public static func tokenize(_ moveText: String) -> [PGNToken] {
@@ -237,9 +275,12 @@ public enum PGNParser {
 
     // Result markers must be read by the same lexer as moves: prose in either
     // comment syntax, or a result inside a variation, cannot end the mainline.
-    private static func scan(_ moveText: String) -> (tokens: [PGNToken], result: String?) {
+    private static func scan(
+        _ moveText: String
+    ) -> (tokens: [PGNToken], result: String?, hasUnterminatedComment: Bool) {
         var tokens: [PGNToken] = []
         var result: String?
+        var hasUnterminatedComment = false
         var variationDepth = 0
         var i = moveText.startIndex
 
@@ -261,6 +302,7 @@ public enum PGNParser {
                     tokens.append(.comment(comment))
                     i = moveText.index(after: end)
                 } else {
+                    hasUnterminatedComment = true
                     i = moveText.endIndex
                 }
             } else if ch == ";" {
@@ -292,7 +334,7 @@ public enum PGNParser {
             }
         }
 
-        return (tokens, result)
+        return (tokens, result, hasUnterminatedComment)
     }
 
     public static func flatMoves(from tokens: [PGNToken]) -> [String] {

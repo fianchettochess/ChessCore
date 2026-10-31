@@ -63,6 +63,28 @@ final class PGNRecordBoundaryTests: XCTestCase {
         XCTAssertEqual(games.count, 1)
         XCTAssertEqual(games.first?.tags["Event"], "Outer")
         XCTAssertEqual(games.first?.moves, ["e4"])
+        XCTAssertEqual(games.first?.diagnostics, [.unterminatedBraceComment])
+    }
+
+    func testOnlyACommentThatNeverClosesEndsAtTheNextRecord() throws {
+        for newline in ["\n", "\r\n", "\r"] {
+            let stray = ["[Event \"A\"]", "", "1.e4 {stray e5 2.Nf3 *", "",
+                         "[Event \"B\"]", "", "1.d4 {closed} d5 *", "",
+                         "[Event \"C\"]", "", "1.c4 c5 *"].joined(separator: newline)
+            let games = PGNParser.parse(stray)
+            XCTAssertEqual(games.map { $0.tags["Event"] }, ["A", "B", "C"])
+            XCTAssertEqual(games.map(\.moves), [["e4"], ["d4", "d5"], ["c4", "c5"]])
+            XCTAssertEqual(games.map(\.diagnostics), [[.unterminatedBraceComment], [], []])
+
+            // The same shape with a closing brace is prose quoting a record.
+            let quoted = ["[Event \"Outer\"]", "", "1.e4 {compare", "",
+                          "[Event \"Quoted\"]", "", "1.d4 d5} e5 *", "",
+                          "[Event \"Next\"]", "", "1.c4 *"].joined(separator: newline)
+            let quotedGames = PGNParser.parse(quoted)
+            XCTAssertEqual(quotedGames.map { $0.tags["Event"] }, ["Outer", "Next"])
+            XCTAssertEqual(quotedGames.first?.moves, ["e4", "e5"])
+            XCTAssertEqual(quotedGames.first?.diagnostics, [])
+        }
     }
 
     func testOverflowedCommentCannotManufactureARecordAndFollowingGameSurvives() {

@@ -47,7 +47,9 @@ print(game.moves)       // ["e4", "e5", "Nf3", "Nc6", "Bb5", ...]
 
 Check `game.diagnostics` before importing. For example, a tag roster with no
 movetext is returned for inspection with `.tagsOnlyRecord` rather than being
-indistinguishable from a deliberately empty game.
+indistinguishable from a deliberately empty game. A `{` comment that never
+closes stops its game's movetext and reports `.unterminatedBraceComment`; a
+later `[Event` line after a blank line still starts the next game.
 
 A ``PGNGame`` carries its tags in insertion order via ``PGNGame/OrderedTags``,
 which keeps the seven-tag roster first:
