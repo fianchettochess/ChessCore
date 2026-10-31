@@ -11,32 +11,29 @@ struct MoveCounterBoundsTests {
         MoveGenerator.applyMoveUnchecked(&position, move)
     }
 
-    @Test("A huge halfmove clock still loads and survives a move")
-    func hugeHalfmoveClock() throws {
-        var position = try #require(Position(fen: "4k3/8/8/8/8/8/8/4K2R w - - \(Int.max) 40"))
-        #expect(position.fullmoveNumber == 40)
+    @Test("Huge counters stay as written and survive a move")
+    func hugeCounters() throws {
+        // Callers refuse a FEN by its counters, and peers replay the same text,
+        // so the parser must not rewrite them.
+        let halfmove = "4k3/8/8/8/8/8/8/4K2R w - - \(Int.max) 40"
+        var position = try #require(Position(fen: halfmove))
+        #expect(position.fen == halfmove)
         try playFirstLegalMove(&position)
         #expect(position.activeColor == .black)
+        #expect(position.halfmoveClock == Int.max)
 
-        // The cap must stay above anything a real game or tool writes.
-        let plausible = "4k3/8/8/8/8/8/8/4K2R w - - 149 5000"
-        #expect(Position(fen: plausible)?.fen == plausible)
+        var fullmove = try #require(Position(fen: "4k3/8/8/8/8/8/8/4K2R b - - 0 \(Int.max)"))
+        try playFirstLegalMove(&fullmove)
+        #expect(fullmove.activeColor == .white)
+        #expect(fullmove.fullmoveNumber == Int.max)
     }
 
-    @Test("A huge fullmove number still loads and survives Black's move")
-    func hugeFullmoveNumber() throws {
-        var position = try #require(Position(fen: "4k3/8/8/8/8/8/8/4K2R b - - 0 \(Int.max)"))
+    @Test("A large counter below the limit still counts exactly")
+    func largeCountersStayExact() throws {
+        var position = try #require(Position(fen: "4k3/8/8/8/8/8/8/4K2R b - - 2000000 3000000"))
         try playFirstLegalMove(&position)
-        #expect(position.activeColor == .white)
-    }
-
-    @Test("Counters that bypassed the FEN parser cannot trap a move")
-    func directlySetCounters() throws {
-        var position = try #require(Position(fen: "4k3/8/8/8/8/8/8/4K2R b - - 0 1"))
-        position.halfmoveClock = Int.max
-        position.fullmoveNumber = Int.max
-        try playFirstLegalMove(&position)
-        #expect(position.activeColor == .white)
+        #expect(position.halfmoveClock == 2_000_001)
+        #expect(position.fullmoveNumber == 3_000_001)
     }
 
     @Test("PGN export with a huge start fullmove does not trap", arguments: ["w", "b"])

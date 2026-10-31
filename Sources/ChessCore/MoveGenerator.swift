@@ -151,9 +151,12 @@ public enum MoveGenerator {
         position.activeColor = position.activeColor.opposite
     }
 
-    /// Counters are public, so one can exceed the limit `Position(fen:)` keeps.
+    /// Counters hold whatever a FEN wrote, up to `Int.max`, and a move must not
+    /// trap on one. They stay exact below that, because callers' own headroom
+    /// checks depend on what was written.
     private static func incremented(_ counter: Int) -> Int {
-        counter >= Position.maxMoveCounter ? Position.maxMoveCounter : counter + 1
+        let (next, overflowed) = counter.addingReportingOverflow(1)
+        return overflowed ? counter : next
     }
 
     public static func algebraicNotation(for move: Move, in position: Position, legalMoves allLegal: [Move]? = nil) -> String {

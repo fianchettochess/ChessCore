@@ -359,7 +359,9 @@ extension PGNExporter {
     /// position where it is black to move at fullmoveNumber N, it returns
     /// (N−1)×2 + 1 so plyIndex 0 maps to "N... <black move>".
     private static func startPlyOffset(for position: Position) -> Int {
-        let base = (position.fullmoveNumber - 1) * 2
+        // A FEN can hold any Int here. Past this bound the printed number stops
+        // growing, and adding a tree's plies to the offset cannot overflow.
+        let base = (min(position.fullmoveNumber, Int.max / 4) - 1) * 2
         return position.activeColor == .white ? base : base + 1
     }
 

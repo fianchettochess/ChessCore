@@ -441,11 +441,6 @@ public struct Position: Equatable, Sendable {
     public var whiteKingSquare = Square(file: 4, rank: 0)
     public var blackKingSquare = Square(file: 4, rank: 7)
 
-    /// The highest value either move counter holds. No real game comes near it,
-    /// and it leaves ply arithmetic far from overflow. A FEN above it still
-    /// loads, read as this value.
-    public static let maxMoveCounter = 1_000_000
-
     public init() {
         board = Array(repeating: nil, count: 64)
         activeColor = .white
@@ -615,8 +610,8 @@ public struct Position: Equatable, Sendable {
             guard let hmc = Int(parts[4]), hmc >= 0,
                   let fmn = Int(parts[5]), fmn >= 1
             else { return nil }
-            halfmoveClock = min(hmc, Self.maxMoveCounter)
-            fullmoveNumber = min(fmn, Self.maxMoveCounter)
+            halfmoveClock = hmc
+            fullmoveNumber = fmn
         }
 
         for i in 0..<64 {
