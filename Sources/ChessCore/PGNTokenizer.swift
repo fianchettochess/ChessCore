@@ -595,6 +595,18 @@ public enum PGNParser {
         pattern: #"\[%clk\s+(\d+):(\d{2}):(\d{2}(?:\.\d+)?)\]"#
     )
 
+    /// The longest clock reading the library keeps: about 115 days, far beyond
+    /// any real time control.
+    private static let maxClockSeconds: TimeInterval = 10_000_000
+
+    /// The reading when a clock could really show it, otherwise `nil`. Hours in
+    /// `[%clk]` are unbounded and snapshots store raw bits, so NaN, infinities,
+    /// negatives and values too large for `Int` all arrive here, and the
+    /// exporter's `Int` conversion traps on the ones it cannot hold.
+    static func usableClockSeconds(_ seconds: TimeInterval) -> TimeInterval? {
+        (0...maxClockSeconds).contains(seconds) ? seconds : nil
+    }
+
     /// The `[%eval …]` pattern: a signed decimal (`-1.42`) or a mate distance
     /// (`#-3`). Same sharing rationale as `clockRegex`.
     private static let evalRegex = try! NSRegularExpression(
@@ -699,7 +711,7 @@ public enum PGNParser {
                 if let h = Int(ns.substring(with: match.range(at: 1))),
                    let m = Int(ns.substring(with: match.range(at: 2))),
                    let s = Double(ns.substring(with: match.range(at: 3))) {
-                    clockSeconds = Double(h) * 3600 + Double(m) * 60 + s
+                    clockSeconds = usableClockSeconds(Double(h) * 3600 + Double(m) * 60 + s)
                 }
                 if let r = Range(match.range, in: remaining) {
                     remaining.removeSubrange(r)

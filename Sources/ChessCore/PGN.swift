@@ -375,12 +375,13 @@ extension PGNExporter {
         let hasEval = node.engineEval != nil
         let hasBest = node.engineBestMoveUCI != nil
         let hasComment = node.comment != nil
-        let hasClock = node.clockSeconds != nil
+        let clockSeconds = node.clockSeconds.flatMap(PGNParser.usableClockSeconds)
+        let hasClock = clockSeconds != nil
         guard hasEval || hasBest || hasComment || hasClock else { return }
 
         var body = ""
 
-        if let seconds = node.clockSeconds {
+        if let seconds = clockSeconds {
             let totalInt = Int(seconds)
             let h = totalInt / 3600
             let m = (totalInt % 3600) / 60
@@ -394,7 +395,7 @@ extension PGNExporter {
             }
         }
 
-        var needsSeparator = node.clockSeconds != nil
+        var needsSeparator = hasClock
 
         if let eval = node.engineEval {
             if needsSeparator { body += " " }

@@ -20,6 +20,61 @@ final class PGNClockTests: XCTestCase {
         XCTAssertNil(PGNParser.parseEngineComment("+1.2; best Nf3").clockSeconds)
     }
 
+    // MARK: - Implausible clocks
+
+    /// The exporter converts through `Int`, which traps on anything it cannot
+    /// hold, so one bad reading would otherwise crash every export, share and
+    /// backup of its game.
+    private static let unusableClocks: [TimeInterval] = [
+        .nan, .infinity, -.infinity, 3.6e21, -5
+    ]
+
+    func testImportDropsAClockTooLargeToExport() throws {
+        let pgn = "1. e4 {[%clk 1000000000000000000:00:00] sharp} e5 {[%clk 0:05:00]} *"
+
+        let parsed = PGNParser.parseEngineComment("[%clk 1000000000000000000:00:00] sharp")
+        XCTAssertNil(parsed.clockSeconds)
+        XCTAssertEqual(parsed.comment, "sharp", "the tag still leaves the prose")
+
+        let game = Game()
+        XCTAssertTrue(game.loadPGN(pgn))
+        XCTAssertNil(game.mainLine[0].clockSeconds)
+        XCTAssertEqual(game.mainLine[0].comment, "sharp")
+        XCTAssertEqual(game.mainLine[1].clockSeconds, 300, "a real clock beside it survives")
+    }
+
+    func testRestoringASnapshotDropsUnusableClocks() throws {
+        for clock in Self.unusableClocks {
+            let source = Game()
+            XCTAssertTrue(source.loadPGN("1. e4 e5 *"))
+            source.mainLine[0].clockSeconds = clock
+            source.mainLine[1].clockSeconds = 300
+            let snapshot = try GameTreeSnapshot(capturing: source)
+
+            let restored = Game()
+            try restored.restore(from: snapshot)
+
+            XCTAssertNil(restored.mainLine[0].clockSeconds, "\(clock)")
+            XCTAssertEqual(restored.mainLine[1].clockSeconds, 300, "\(clock)")
+        }
+    }
+
+    func testExportOmitsAnUnusableClockAndKeepsTheRestOfTheComment() {
+        for clock in Self.unusableClocks {
+            let game = Game()
+            XCTAssertTrue(game.loadPGN("1. e4 e5 *"))
+            game.mainLine[0].clockSeconds = clock
+            game.mainLine[1].clockSeconds = clock
+            game.mainLine[1].comment = "sharp"
+
+            XCTAssertEqual(
+                PGNExporter.moveText(for: game.rootChildren).trimmingCharacters(in: .whitespaces),
+                "1. e4 e5 {sharp}",
+                "\(clock)"
+            )
+        }
+    }
+
     // MARK: - Engine comments
 
     func testEngineCommentReadsTheLibrarysOwnExportFormat() {
