@@ -47,6 +47,10 @@ struct PGNUnparseableMoveTests {
         let game = try parsed(text)
         #expect(PGNParser.parseMainLineSnapshot(from: game).moves.map(\.notation) == ["e4", "e5", "Nf3"])
         #expect(try PGNParser.loadGame(from: game, maximumTreeNodes: 100).mainLine.map(\.notation) == ["e4", "e5", "Nf3"])
+
+        var flat = game
+        flat.moveTokens = []
+        #expect(try PGNParser.loadGame(from: flat, maximumTreeNodes: 100).mainLine.map(\.notation) == ["e4", "e5", "Nf3"])
     }
 
     @Test("Evaluation glyphs written as words keep a variation and the game", arguments: ["+=", "+-", "=", "N"])
