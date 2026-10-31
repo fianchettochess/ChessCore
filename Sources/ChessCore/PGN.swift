@@ -19,21 +19,44 @@ extension PGNParser {
         return loadGame(from: pgnGame)
     }
 
+    /// Lenient materialization, which stored games rely on to stay openable.
+    ///
+    /// A main-line token that cannot be played is passed over without a
+    /// diagnostic, so the result may not be the game that was written; a game
+    /// holding only the flat `moves` list stops at that token instead. Use
+    /// ``loadGame(from:maximumTreeNodes:)`` or ``parseMainLineSnapshot(from:pliesLimit:)``
+    /// to learn that a game has such a token.
     public static func loadGame(from pgnGame: PGNGame) -> Game? {
-        try? loadGame(
-            from: pgnGame,
-            maximumTreeNodes: maximumMoveTreeNodes
+        try? materialize(
+            pgnGame,
+            maximumTreeNodes: maximumMoveTreeNodes,
+            rejectsUnparseableMainLine: false
         )
     }
 
     /// Materialize one parsed PGN with an explicit whole-tree resource budget.
     ///
     /// Unlike the compatibility overload, this surface reports a limit breach
-    /// as ``PGNDiagnostic/moveTreeNodeLimitExceeded(maximumNodes:)``. No partial
-    /// game escapes: the local tree is released as the error unwinds.
+    /// as ``PGNDiagnostic/moveTreeNodeLimitExceeded(maximumNodes:)`` and a
+    /// main-line token it cannot play as
+    /// ``PGNDiagnostic/unparseableMainlineMove(san:plyIndex:)``, the same
+    /// diagnostic the snapshot path reports. No partial game escapes: the local
+    /// tree is released as the error unwinds.
     public static func loadGame(
         from pgnGame: PGNGame,
         maximumTreeNodes: Int
+    ) throws -> Game {
+        try materialize(
+            pgnGame,
+            maximumTreeNodes: maximumTreeNodes,
+            rejectsUnparseableMainLine: true
+        )
+    }
+
+    private static func materialize(
+        _ pgnGame: PGNGame,
+        maximumTreeNodes: Int,
+        rejectsUnparseableMainLine: Bool
     ) throws -> Game {
         // A non-positive node budget admits no tree at all; surface it as a
         // catchable diagnostic rather than trapping a public throwing API.
@@ -56,7 +79,14 @@ extension PGNParser {
         if pgnGame.moveTokens.isEmpty {
             var materializedNodeCount = 0
             for san in pgnGame.moves {
+                if isMoveTextNoise(MoveAnnotation.extract(from: san).cleaned) { continue }
                 guard let move = parseMove(san, in: game.position) else {
+                    if rejectsUnparseableMainLine {
+                        throw PGNDiagnostic.unparseableMainlineMove(
+                            san: MoveAnnotation.extract(from: san).cleaned,
+                            plyIndex: materializedNodeCount
+                        )
+                    }
                     return game
                 }
                 guard materializedNodeCount < maximumTreeNodes else {
@@ -71,7 +101,8 @@ extension PGNParser {
             try buildTree(
                 game: game,
                 tokens: pgnGame.moveTokens,
-                maximumNodes: maximumTreeNodes
+                maximumNodes: maximumTreeNodes,
+                rejectsUnparseableMainLine: rejectsUnparseableMainLine
             )
         }
 
@@ -81,15 +112,29 @@ extension PGNParser {
     private static func buildTree(
         game: Game,
         tokens: [PGNToken],
-        maximumNodes: Int
+        maximumNodes: Int,
+        rejectsUnparseableMainLine: Bool
     ) throws {
         var nodeStack: [MoveNode?] = [nil]
+        // Parallel to `nodeStack`: the frame's next move continues a line whose
+        // alternatives were read first (see `opensAfterLastMove`).
+        var continuationIsPending = [false]
+        let nestedLines = nestedVariationMoves(in: tokens)
         var materializedNodeCount = 0
+        // Open parentheses in the variation being abandoned, its own included.
+        // Its own close still reaches the switch, to pop its frame.
+        var abandonedDepth = 0
 
-        for token in tokens {
+        for (tokenIndex, token) in tokens.enumerated() {
+            if abandonedDepth > 0 {
+                if case .variationStart = token { abandonedDepth += 1 }
+                if case .variationEnd = token { abandonedDepth -= 1 }
+                if abandonedDepth > 0 { continue }
+            }
             switch token {
             case .move(let san):
                 let (cleanedSan, annotation) = MoveAnnotation.extract(from: san)
+                if isMoveTextNoise(cleanedSan) { continue }
                 let currentPos: Position
                 if let last = nodeStack.last, let node = last {
                     currentPos = node.positionAfter
@@ -99,11 +144,32 @@ extension PGNParser {
                 // Generate the legal-move list ONCE and thread it into both the
                 // SAN parse and the canonical-notation derivation.
                 let legal = MoveGenerator.legalMoves(for: currentPos)
-                guard let move = parseMove(cleanedSan, in: currentPos, legalMoves: legal) else { continue }
+                guard let move = parseMove(cleanedSan, in: currentPos, legalMoves: legal) else {
+                    // The rest of a variation depends on the move it could not
+                    // read, so replaying it would invent a line.
+                    if nodeStack.count > 1 {
+                        abandonedDepth = 1
+                    } else if rejectsUnparseableMainLine {
+                        throw PGNDiagnostic.unparseableMainlineMove(
+                            san: cleanedSan,
+                            plyIndex: (nodeStack.last??.plyIndex ?? -1) + 1
+                        )
+                    }
+                    continue
+                }
 
                 let parentNode = nodeStack.last ?? nil
                 let siblings = parentNode?.children ?? game.rootChildren
                 let ply = (parentNode?.plyIndex ?? -1) + 1
+                defer {
+                    if continuationIsPending[continuationIsPending.count - 1] {
+                        continuationIsPending[continuationIsPending.count - 1] = false
+                        if let parentNode, let placed = nodeStack[nodeStack.count - 1],
+                           let index = parentNode.children.firstIndex(where: { $0 === placed }) {
+                            parentNode.children.insert(parentNode.children.remove(at: index), at: 0)
+                        }
+                    }
+                }
 
                 if let existing = siblings.first(where: { $0.move == move }) {
                     if let annotation { existing.annotation = annotation }
@@ -134,11 +200,22 @@ extension PGNParser {
             case .variationStart:
                 let currentNode = nodeStack.last ?? nil
                 let branchPoint = currentNode?.parent
-                nodeStack.append(branchPoint)
+                // A line over the budget fails either way, and replaying it
+                // would spend work the budget exists to bound.
+                if let currentNode, let line = nestedLines[tokenIndex],
+                   line.count <= maximumNodes - materializedNodeCount,
+                   opensAfterLastMove(line, lastMove: currentNode, startPosition: game.startPosition) {
+                    continuationIsPending[continuationIsPending.count - 1] = true
+                    nodeStack.append(currentNode)
+                } else {
+                    nodeStack.append(branchPoint)
+                }
+                continuationIsPending.append(false)
 
             case .variationEnd:
                 if nodeStack.count > 1 {
                     nodeStack.removeLast()
+                    continuationIsPending.removeLast()
                 }
 
             case .comment(let text):
@@ -171,6 +248,57 @@ extension PGNParser {
         if let lastNode = mainLine.last {
             game.navigateToNode(lastNode)
         }
+    }
+
+    /// The moves each nested variation plays at its own level, keyed by the
+    /// index of its opening token. One pass, so hostile nesting stays linear.
+    private static func nestedVariationMoves(in tokens: [PGNToken]) -> [Int: [String]] {
+        var moves: [Int: [String]] = [:]
+        var openVariations: [Int] = []
+        for (index, token) in tokens.enumerated() {
+            switch token {
+            case .variationStart:
+                openVariations.append(index)
+                if openVariations.count >= 2 { moves[index] = [] }
+            case .variationEnd:
+                _ = openVariations.popLast()
+            case .move(let san):
+                if openVariations.count >= 2, let open = openVariations.last {
+                    moves[open, default: []].append(san)
+                }
+            case .comment, .nag:
+                break
+            }
+        }
+        return moves
+    }
+
+    /// Whether a nested variation was stored by an exporter that wrote a line's
+    /// alternatives ahead of the move they replace, so it starts from the
+    /// position after `lastMove` rather than from `lastMove`'s parent. Library
+    /// rows keep only this text, and those variations are recoverable from it.
+    ///
+    /// Move numbers do not survive tokenizing, and SAN carries no colour, so the
+    /// whole line has to replay. Standard PGN wins whenever it replays, which
+    /// leaves a stored line that is legal from both positions in standard place.
+    private static func opensAfterLastMove(
+        _ line: [String],
+        lastMove: MoveNode,
+        startPosition: Position
+    ) -> Bool {
+        let standardStart = lastMove.parent?.positionAfter ?? startPosition
+        return !replays(line, from: standardStart) && replays(line, from: lastMove.positionAfter)
+    }
+
+    private static func replays(_ line: [String], from start: Position) -> Bool {
+        var position = start
+        for san in line {
+            let (cleanedSan, _) = MoveAnnotation.extract(from: san)
+            if isMoveTextNoise(cleanedSan) { continue }
+            guard let move = parseMove(cleanedSan, in: position) else { return false }
+            MoveGenerator.applyMoveUnchecked(&position, move)
+        }
+        return !line.isEmpty
     }
 }
 
@@ -231,7 +359,9 @@ extension PGNExporter {
     /// position where it is black to move at fullmoveNumber N, it returns
     /// (N−1)×2 + 1 so plyIndex 0 maps to "N... <black move>".
     private static func startPlyOffset(for position: Position) -> Int {
-        let base = (position.fullmoveNumber - 1) * 2
+        // A FEN can hold any Int here. Past this bound the printed number stops
+        // growing, and adding a tree's plies to the offset cannot overflow.
+        let base = (min(position.fullmoveNumber, Int.max / 4) - 1) * 2
         return position.activeColor == .white ? base : base + 1
     }
 
@@ -243,19 +373,21 @@ extension PGNExporter {
     /// that branch — the rest of the document still exports cleanly.
     private static let maxVariationDepth = 64
 
+    /// Loops down the main line rather than recursing: a line can be
+    /// `maximumMoveTreeNodes` long, and exports run on background threads with
+    /// small stacks.
     private static func writeNodes(_ children: [MoveNode], basePly: Int, into result: inout String) {
-        guard let mainNode = children.first else { return }
+        var siblings = children
+        while let mainNode = siblings.first {
+            writeSingleNode(mainNode, basePly: basePly, into: &result, afterVariation: false)
 
-        writeSingleNode(mainNode, basePly: basePly, into: &result, afterVariation: false)
+            for variation in siblings.dropFirst() {
+                result += "( "
+                writeLine(from: variation, basePly: basePly, into: &result, depth: 1)
+                result += ") "
+            }
 
-        for variation in children.dropFirst() {
-            result += "( "
-            writeLine(from: variation, basePly: basePly, into: &result, depth: 1)
-            result += ") "
-        }
-
-        if !mainNode.children.isEmpty {
-            writeNodes(mainNode.children, basePly: basePly, into: &result)
+            siblings = mainNode.children
         }
     }
 
@@ -266,15 +398,18 @@ extension PGNExporter {
         }
         writeSingleNode(node, basePly: basePly, into: &result, afterVariation: false)
 
+        // The move first, then its alternatives: a reader branches a variation
+        // from the parent of the move just written.
+        var afterVariation = false
         var current = node
         while let next = current.children.first {
-            let hasVariations = current.children.count > 1
+            writeSingleNode(next, basePly: basePly, into: &result, afterVariation: afterVariation)
             for variation in current.children.dropFirst() {
                 result += "( "
                 writeLine(from: variation, basePly: basePly, into: &result, depth: depth + 1)
                 result += ") "
             }
-            writeSingleNode(next, basePly: basePly, into: &result, afterVariation: hasVariations)
+            afterVariation = current.children.count > 1
             current = next
         }
     }
@@ -301,12 +436,13 @@ extension PGNExporter {
         let hasEval = node.engineEval != nil
         let hasBest = node.engineBestMoveUCI != nil
         let hasComment = node.comment != nil
-        let hasClock = node.clockSeconds != nil
+        let clockSeconds = node.clockSeconds.flatMap(PGNParser.usableClockSeconds)
+        let hasClock = clockSeconds != nil
         guard hasEval || hasBest || hasComment || hasClock else { return }
 
         var body = ""
 
-        if let seconds = node.clockSeconds {
+        if let seconds = clockSeconds {
             let totalInt = Int(seconds)
             let h = totalInt / 3600
             let m = (totalInt % 3600) / 60
@@ -320,7 +456,7 @@ extension PGNExporter {
             }
         }
 
-        var needsSeparator = node.clockSeconds != nil
+        var needsSeparator = hasClock
 
         if let eval = node.engineEval {
             if needsSeparator { body += " " }

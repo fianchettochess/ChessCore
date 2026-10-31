@@ -75,6 +75,39 @@ final class MoveGeneratorTests: XCTestCase {
         XCTAssertEqual(MoveGenerator.algebraicNotation(for: castleQ, in: pos), "O-O-O")
     }
 
+    // A castling rook can land on the enemy king's file. The marker is part of
+    // the SAN that move lists show and PGN exports, and castling used to return
+    // before the suffix was worked out.
+    func testACastleThatChecksOrMatesCarriesTheMarker() throws {
+        let cases: [(fen: String, to: String, san: String)] = [
+            ("5k2/8/8/8/8/8/8/4K2R w K - 0 1", "g1", "O-O+"),
+            ("3k4/8/8/8/8/8/8/R3K3 w Q - 0 1", "c1", "O-O-O+"),
+            ("5k2/8/8/8/8/8/4R1R1/4K2R w K - 0 1", "g1", "O-O#"),
+            ("3k4/8/8/8/8/8/2R1R3/R3K3 w Q - 0 1", "c1", "O-O-O#"),
+            ("4k2r/8/8/8/8/8/8/5K2 b k - 0 1", "g8", "O-O+"),
+            ("r3k3/2r1r3/8/8/8/8/8/3K4 b q - 0 1", "c8", "O-O-O#")
+        ]
+        for testCase in cases {
+            let pos = try XCTUnwrap(Position(fen: testCase.fen))
+            let target = try XCTUnwrap(Square(algebraic: testCase.to))
+            let legal = MoveGenerator.legalMoves(for: pos)
+            let castle = try XCTUnwrap(legal.first { $0.isCastling && $0.to == target }, testCase.fen)
+            XCTAssertEqual(MoveGenerator.algebraicNotation(for: castle, in: pos, legalMoves: legal), testCase.san, testCase.fen)
+            XCTAssertEqual(PGNParser.parseMove(testCase.san, in: pos), castle, testCase.fen)
+        }
+    }
+
+    func testAnExportedGameKeepsTheCastlingCheckMarker() throws {
+        let pgn = """
+        [FEN "3k4/8/8/8/8/8/8/R3K3 w Q - 0 1"]
+
+        1. O-O-O *
+        """
+        let game = try XCTUnwrap(PGNParser.loadGame(from: pgn))
+        let exported = PGNExporter.export(game: game)
+        XCTAssertTrue(exported.contains("1. O-O-O+"), exported)
+    }
+
     func testCheckAndMateDetection() {
         // Fool's mate position: 1.f3 e5 2.g4 Qh4#
         let pos = Position(fen: "rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 1 3")!

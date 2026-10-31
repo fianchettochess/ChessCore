@@ -141,19 +141,27 @@ public enum MoveGenerator {
         if piece.type == .pawn || move.capturedPiece != nil {
             position.halfmoveClock = 0
         } else {
-            position.halfmoveClock += 1
+            position.halfmoveClock = incremented(position.halfmoveClock)
         }
 
         if piece.color == .black {
-            position.fullmoveNumber += 1
+            position.fullmoveNumber = incremented(position.fullmoveNumber)
         }
 
         position.activeColor = position.activeColor.opposite
     }
 
+    /// Counters hold whatever a FEN wrote, up to `Int.max`, and a move must not
+    /// trap on one. They stay exact below that, because callers' own headroom
+    /// checks depend on what was written.
+    private static func incremented(_ counter: Int) -> Int {
+        let (next, overflowed) = counter.addingReportingOverflow(1)
+        return overflowed ? counter : next
+    }
+
     public static func algebraicNotation(for move: Move, in position: Position, legalMoves allLegal: [Move]? = nil) -> String {
         if move.isCastling {
-            return move.to.file == 6 ? "O-O" : "O-O-O"
+            return (move.to.file == 6 ? "O-O" : "O-O-O") + checkSuffix(for: move, in: position)
         }
 
         var notation = ""
@@ -198,13 +206,16 @@ public enum MoveGenerator {
             notation += "=\(pieceSymbol(promo))"
         }
 
+        return notation + checkSuffix(for: move, in: position)
+    }
+
+    private static func checkSuffix(for move: Move, in position: Position) -> String {
         var newPos = position
         applyMoveUnchecked(&newPos, move)
-        if isSquareAttacked(findKing(in: newPos, color: newPos.activeColor), by: position.activeColor, in: newPos) {
-            notation += hasAnyLegalMove(for: newPos) ? "+" : "#"
+        guard isSquareAttacked(findKing(in: newPos, color: newPos.activeColor), by: position.activeColor, in: newPos) else {
+            return ""
         }
-
-        return notation
+        return hasAnyLegalMove(for: newPos) ? "+" : "#"
     }
 
     // MARK: - Helpers

@@ -7,6 +7,8 @@ import Foundation
 public enum PGNDiagnostic: Error, Equatable, Sendable {
     /// A tag roster was present but the record contained no movetext at all.
     case tagsOnlyRecord
+    /// A `{` comment was never closed, so the record's movetext stops at it.
+    case unterminatedBraceComment
     /// A supplied FEN tag could not be parsed, so no moves were interpreted.
     case invalidFEN(String)
     /// A main-line SAN token could not be applied at the expected ply.
@@ -153,13 +155,30 @@ public enum PGNParser {
         // would manufacture a valid-looking but incomplete game.
         var moveTextOverflow = false
         var inBraceComment = false
+        var previousLineWasBlank = false
+        var commentClosesOnLine = -1
 
         // stdlib split (Substrings share the parent buffer) instead of
         // Foundation `components(separatedBy: .newlines)` (a String copy per
         // line + CharacterSet). Normalize physical newline dialects while
         // retaining the boundaries required by semicolon comments.
-        for line in pgn.split(omittingEmptySubsequences: false, whereSeparator: { $0.isNewline }) {
+        let lines = pgn.split(omittingEmptySubsequences: false, whereSeparator: { $0.isNewline })
+        for (lineIndex, line) in lines.enumerated() {
             let trimmed = line.trimmingCharacters(in: CharacterSet.whitespaces)
+            defer { previousLineWasBlank = trimmed.isEmpty }
+
+            // A stray `{` must not swallow every later game. A record opening
+            // after a blank line ends the comment, unless the comment does go
+            // on to close: then that record is quoted prose. Remembering the
+            // closing line keeps a comment quoting many records linear.
+            if inBraceComment, previousLineWasBlank, lineIndex > commentClosesOnLine,
+               line.hasPrefix("[Event "), trimmed.hasSuffix("]") {
+                if let closingLine = closingBraceLine(in: lines, from: lineIndex) {
+                    commentClosesOnLine = closingLine
+                } else {
+                    inBraceComment = false
+                }
+            }
 
             if !inBraceComment && trimmed.hasPrefix("[") && trimmed.hasSuffix("]") {
                 if !moveTextLines.isEmpty || moveTextOverflow {
@@ -170,6 +189,9 @@ public enum PGNParser {
                         current.moves = flatMoves(from: tokens)
                         current.moveTokens = tokens
                         current.result = scanned.result
+                        if scanned.hasUnterminatedComment {
+                            current.diagnostics.append(.unterminatedBraceComment)
+                        }
                         games.append(current)
                     }
                     current = PGNGame()
@@ -225,10 +247,26 @@ public enum PGNParser {
             current.moves = flatMoves(from: tokens)
             current.moveTokens = tokens
             current.result = scanned.result
+            if scanned.hasUnterminatedComment {
+                current.diagnostics.append(.unterminatedBraceComment)
+            }
             games.append(current)
         }
 
         return games
+    }
+
+    /// The line holding the next brace from `start` if that brace closes a
+    /// comment. Nil if the next brace opens one or no brace follows, which
+    /// means the comment already open at `start` is never closed.
+    private static func closingBraceLine(in lines: [Substring], from start: Int) -> Int? {
+        for index in start..<lines.count {
+            for byte in lines[index].utf8 {
+                if byte == UInt8(ascii: "}") { return index }
+                if byte == UInt8(ascii: "{") { return nil }
+            }
+        }
+        return nil
     }
 
     public static func tokenize(_ moveText: String) -> [PGNToken] {
@@ -237,9 +275,12 @@ public enum PGNParser {
 
     // Result markers must be read by the same lexer as moves: prose in either
     // comment syntax, or a result inside a variation, cannot end the mainline.
-    private static func scan(_ moveText: String) -> (tokens: [PGNToken], result: String?) {
+    private static func scan(
+        _ moveText: String
+    ) -> (tokens: [PGNToken], result: String?, hasUnterminatedComment: Bool) {
         var tokens: [PGNToken] = []
         var result: String?
+        var hasUnterminatedComment = false
         var variationDepth = 0
         var i = moveText.startIndex
 
@@ -261,6 +302,7 @@ public enum PGNParser {
                     tokens.append(.comment(comment))
                     i = moveText.index(after: end)
                 } else {
+                    hasUnterminatedComment = true
                     i = moveText.endIndex
                 }
             } else if ch == ";" {
@@ -292,7 +334,7 @@ public enum PGNParser {
             }
         }
 
-        return (tokens, result)
+        return (tokens, result, hasUnterminatedComment)
     }
 
     public static func flatMoves(from tokens: [PGNToken]) -> [String] {
@@ -318,8 +360,11 @@ public enum PGNParser {
     /// regenerate it. Identical result to `parseMove(_:in:)`, which delegates
     /// here with a freshly generated list.
     public static func parseMove(_ san: String, in position: Position, legalMoves: [Move]) -> Move? {
-        let cleaned = String(san.filter { $0 != "+" && $0 != "#" && $0 != "!" && $0 != "?" })
-            .trimmingCharacters(in: CharacterSet.whitespaces)
+        // Check and quality marks only ever trail a move.
+        var cleaned = san.trimmingCharacters(in: CharacterSet.whitespaces)
+        while let last = cleaned.last, "+#!?".contains(last) {
+            cleaned.removeLast()
+        }
 
         if cleaned == "O-O" || cleaned == "0-0" {
             let rank = position.activeColor == .white ? 0 : 7
@@ -346,7 +391,12 @@ public enum PGNParser {
                 // out-of-bounds subscript.
                 return nil
             }
-            promotion = pieceTypeFromChar(remaining[afterEq])
+            // Exactly one piece letter; "e4=Z" and "a8=Qxyz" are not moves.
+            guard remaining.index(after: afterEq) == remaining.endIndex,
+                  let promoted = pieceTypeFromChar(remaining[afterEq]) else {
+                return nil
+            }
+            promotion = promoted
             remaining = String(remaining[remaining.startIndex..<eqIdx])
         }
 
@@ -373,28 +423,45 @@ public enum PGNParser {
             }
         }
 
+        var namesPawn = false
         guard let firstChar = remaining.first else { return nil }
         if firstChar.isUppercase {
-            pieceType = pieceTypeFromChar(firstChar) ?? .pawn
+            // An explicit "P" names a pawn, which some older tools write. An
+            // unknown letter must not fall through to a pawn: that would replay
+            // a different game from the one the PGN describes.
+            if firstChar == "P" {
+                namesPawn = true
+            } else {
+                guard let piece = pieceTypeFromChar(firstChar) else { return nil }
+                pieceType = piece
+            }
             remaining = String(remaining.dropFirst())
         }
 
-        remaining.removeAll { $0 == "x" }  // Foundation-free; avoids an intermediate string.
-
         guard remaining.count >= 2 else { return nil }
 
-        let targetAlgebraic = String(remaining.suffix(2))
-        let disambig = String(remaining.dropLast(2))
+        guard let target = Square(algebraic: String(remaining.suffix(2))) else { return nil }
 
-        guard let target = Square(algebraic: targetAlgebraic) else { return nil }
-
-        for char in disambig {
-            if char >= "a" && char <= "h", let ascii = char.asciiValue {
-                disambigFile = Int(ascii) - 97
-            } else if char >= "1" && char <= "8", let ascii = char.asciiValue {
-                disambigRank = Int(ascii) - 49
-            }
+        // Between the piece letter and the target: an optional origin file,
+        // an optional origin rank, then an optional "x" or long-algebraic "-".
+        // Nothing else is skipped, so a lowercase piece letter ("nf3") or
+        // other junk fails here instead of reading as a pawn move to the
+        // same square.
+        var origin = remaining.dropLast(2)
+        let separator = origin.last == "x" || origin.last == "-" ? origin.popLast() : nil
+        let hasOrigin = !origin.isEmpty
+        if let ascii = origin.first?.asciiValue, ascii >= 97, ascii <= 104 {
+            disambigFile = Int(ascii) - 97
+            origin.removeFirst()
         }
+        if let ascii = origin.first?.asciiValue, ascii >= 49, ascii <= 56 {
+            disambigRank = Int(ascii) - 49
+            origin.removeFirst()
+        }
+        guard origin.isEmpty else { return nil }
+        if separator == "-", disambigFile == nil || disambigRank == nil { return nil }
+        // Without a "P", a file is what names a pawn: "2e4" and "xe4" are not moves.
+        if pieceType == .pawn, !namesPawn, hasOrigin || separator != nil, disambigFile == nil { return nil }
 
         let candidates = legalMoves.filter { move in
             guard move.piece == pieceType, move.to == target else { return false }
@@ -421,6 +488,23 @@ public enum PGNParser {
         // here would make a malformed PGN describe a different game.
         return nil
     }
+
+    /// Whether a movetext word, with any quality mark already removed, marks up
+    /// the previous move rather than being one: a detached `!`, the `...` of
+    /// `1. ... e5`, `e.p.` after an en passant capture, or an evaluation glyph
+    /// such as `+=` or the novelty `N`, which annotated books write as words.
+    /// Passing over these leaves the replay on the right board, unlike an
+    /// unreadable move.
+    static func isMoveTextNoise(_ cleanedSan: String) -> Bool {
+        cleanedSan.isEmpty || cleanedSan.allSatisfy { $0 == "." } || moveTextMarkup.contains(cleanedSan)
+    }
+
+    private static let moveTextMarkup: Set<String> = [
+        "e.p.", "e.p", "ep", "\u{2026}",
+        "+", "#", "=", "+=", "=+", "+/=", "=/+", "+/-", "-/+", "+-", "-+",
+        "\u{221E}", "\u{00B1}", "\u{2213}", "\u{2A72}", "\u{2A71}", "\u{25A1}",
+        "N", "D",
+    ]
 
     /// Resolve the starting position shared by snapshot and live-tree PGN
     /// materialization. `nil` means a non-empty FEN tag was invalid.
@@ -497,6 +581,7 @@ public enum PGNParser {
             case .move(let san):
                 guard variationDepth == 0 else { continue }
                 let (cleanedSan, annotation) = MoveAnnotation.extract(from: san)
+                if isMoveTextNoise(cleanedSan) { continue }
                 // Generate the legal-move list once for both the SAN parse and
                 // the canonical-notation derivation.
                 let legal = MoveGenerator.legalMoves(for: position)
@@ -594,6 +679,18 @@ public enum PGNParser {
     private static let clockRegex = try! NSRegularExpression(
         pattern: #"\[%clk\s+(\d+):(\d{2}):(\d{2}(?:\.\d+)?)\]"#
     )
+
+    /// The longest clock reading the library keeps: about 115 days, far beyond
+    /// any real time control.
+    private static let maxClockSeconds: TimeInterval = 10_000_000
+
+    /// The reading when a clock could really show it, otherwise `nil`. Hours in
+    /// `[%clk]` are unbounded and snapshots store raw bits, so NaN, infinities,
+    /// negatives and values too large for `Int` all arrive here, and the
+    /// exporter's `Int` conversion traps on the ones it cannot hold.
+    static func usableClockSeconds(_ seconds: TimeInterval) -> TimeInterval? {
+        (0...maxClockSeconds).contains(seconds) ? seconds : nil
+    }
 
     /// The `[%eval …]` pattern: a signed decimal (`-1.42`) or a mate distance
     /// (`#-3`). Same sharing rationale as `clockRegex`.
@@ -699,7 +796,7 @@ public enum PGNParser {
                 if let h = Int(ns.substring(with: match.range(at: 1))),
                    let m = Int(ns.substring(with: match.range(at: 2))),
                    let s = Double(ns.substring(with: match.range(at: 3))) {
-                    clockSeconds = Double(h) * 3600 + Double(m) * 60 + s
+                    clockSeconds = usableClockSeconds(Double(h) * 3600 + Double(m) * 60 + s)
                 }
                 if let r = Range(match.range, in: remaining) {
                     remaining.removeSubrange(r)

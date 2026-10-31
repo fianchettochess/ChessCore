@@ -47,7 +47,9 @@ print(game.moves)       // ["e4", "e5", "Nf3", "Nc6", "Bb5", ...]
 
 Check `game.diagnostics` before importing. For example, a tag roster with no
 movetext is returned for inspection with `.tagsOnlyRecord` rather than being
-indistinguishable from a deliberately empty game.
+indistinguishable from a deliberately empty game. A `{` comment that never
+closes stops its game's movetext and reports `.unterminatedBraceComment`; a
+later `[Event` line after a blank line still starts the next game.
 
 A ``PGNGame`` carries its tags in insertion order via ``PGNGame/OrderedTags``,
 which keeps the seven-tag roster first:
@@ -115,8 +117,10 @@ let snapshot = await Task.detached(priority: .userInitiated) {
 ## Materialize a live move tree
 
 ``PGNParser``'s `loadGame(from:)` overloads build a live ``Game`` and apply the
-default whole-tree node budget, including variations. Code that needs a
-specific budget and an explicit failure reason can use
+default whole-tree node budget, including variations. They are lenient, so
+stored games stay openable: a main-line token that cannot be played is passed
+over without a diagnostic. Code that needs a specific budget and an explicit
+failure reason can use
 ``PGNParser/loadGame(from:maximumTreeNodes:)``:
 
 ```swift
@@ -125,6 +129,8 @@ do {
     // Use game.
 } catch PGNDiagnostic.moveTreeNodeLimitExceeded(let maximumNodes) {
     print("PGN tree exceeds the \(maximumNodes)-node budget")
+} catch PGNDiagnostic.unparseableMainlineMove(let san, let plyIndex) {
+    print("Could not read \(san) at ply \(plyIndex)")
 }
 ```
 
@@ -135,7 +141,8 @@ a board directly — use ``PGNParser/parseMove(_:in:)``. It handles
 castling (`O-O` / `0-0`), promotion (`=Q`), disambiguation, and captures.
 Parsing fails when the supplied SAN does not identify exactly one legal move;
 in particular, required piece disambiguation and promotion suffixes are never
-inferred from move-generator order:
+inferred from move-generator order. Tokens that are not SAN, such as a lowercase
+piece letter (`nf3`), are rejected rather than read as a pawn move:
 
 ```swift
 var position = Position.initial()

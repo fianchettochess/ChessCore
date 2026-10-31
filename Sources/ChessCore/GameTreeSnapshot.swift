@@ -383,9 +383,9 @@ public struct GameTreeSnapshot: Codable, Equatable, Sendable {
             node.moveAccuracy = record.moveAccuracyBitPattern.map(
                 Double.init(bitPattern:)
             )
-            node.clockSeconds = record.clockSecondsBitPattern.map(
-                Double.init(bitPattern:)
-            )
+            node.clockSeconds = record.clockSecondsBitPattern
+                .map(Double.init(bitPattern:))
+                .flatMap(PGNParser.usableClockSeconds)
             if let parent {
                 parent.children.append(node)
             } else {

@@ -97,8 +97,12 @@ public final class MoveNode: Identifiable {
     public var hasVariations: Bool { children.count > 1 }
 
     public var isOnMainLine: Bool {
-        guard let parent else { return true }
-        return parent.children.first === self && parent.isOnMainLine
+        var node = self
+        while let parent = node.parent {
+            guard parent.children.first === node else { return false }
+            node = parent
+        }
+        return true
     }
 
     public func pathFromRoot() -> [MoveNode] {
