@@ -141,14 +141,19 @@ public enum MoveGenerator {
         if piece.type == .pawn || move.capturedPiece != nil {
             position.halfmoveClock = 0
         } else {
-            position.halfmoveClock += 1
+            position.halfmoveClock = incremented(position.halfmoveClock)
         }
 
         if piece.color == .black {
-            position.fullmoveNumber += 1
+            position.fullmoveNumber = incremented(position.fullmoveNumber)
         }
 
         position.activeColor = position.activeColor.opposite
+    }
+
+    /// Counters are public, so one can exceed the limit `Position(fen:)` keeps.
+    private static func incremented(_ counter: Int) -> Int {
+        counter >= Position.maxMoveCounter ? Position.maxMoveCounter : counter + 1
     }
 
     public static func algebraicNotation(for move: Move, in position: Position, legalMoves allLegal: [Move]? = nil) -> String {
