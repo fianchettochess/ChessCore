@@ -22,7 +22,8 @@ extension PGNParser {
     /// Lenient materialization, which stored games rely on to stay openable.
     ///
     /// A main-line token that cannot be played is passed over without a
-    /// diagnostic, so the result may not be the game that was written. Use
+    /// diagnostic, so the result may not be the game that was written; a game
+    /// holding only the flat `moves` list stops at that token instead. Use
     /// ``loadGame(from:maximumTreeNodes:)`` or ``parseMainLineSnapshot(from:pliesLimit:)``
     /// to learn that a game has such a token.
     public static func loadGame(from pgnGame: PGNGame) -> Game? {
@@ -199,7 +200,10 @@ extension PGNParser {
             case .variationStart:
                 let currentNode = nodeStack.last ?? nil
                 let branchPoint = currentNode?.parent
+                // A line over the budget fails either way, and replaying it
+                // would spend work the budget exists to bound.
                 if let currentNode, let line = nestedLines[tokenIndex],
+                   line.count <= maximumNodes - materializedNodeCount,
                    opensAfterLastMove(line, lastMove: currentNode, startPosition: game.startPosition) {
                     continuationIsPending[continuationIsPending.count - 1] = true
                     nodeStack.append(currentNode)
