@@ -161,4 +161,24 @@ struct ReleaseHardeningTests {
         // A rook is sufficient.
         #expect(try !insufficient("4k3/8/8/8/8/8/R7/4K3 w - - 0 1"))
     }
+
+    @Test("Same-colour promoted bishops remain a dead position; opposite colours or a knight keep play alive")
+    func multipleBishopsDoNotHideOrInventDraws() throws {
+        let cases: [(fen: String, insufficient: Bool)] = [
+            ("4k3/8/8/8/8/8/B1B5/4K3 w - - 0 1", true),
+            ("4k3/8/8/8/8/B1B5/8/4K3 w - - 0 1", true),
+            ("4k3/b1b5/8/8/8/8/8/4K3 w - - 0 1", true),
+            ("4k3/8/8/8/b7/8/B1B5/4K3 w - - 0 1", true),
+            ("4k3/8/8/8/8/8/BB6/4K3 w - - 0 1", false),
+            ("4k3/8/8/8/1b6/8/B1B5/4K3 w - - 0 1", false),
+            ("4k3/8/8/8/8/8/B1BN4/4K3 w - - 0 1", false),
+        ]
+        for item in cases {
+            let position = try #require(Position(fen: item.fen))
+            #expect(position.hasInsufficientMaterial == item.insufficient, "\(item.fen)")
+            let game = Game()
+            #expect(game.loadFEN(item.fen))
+            #expect((game.gameState == .insufficientMaterial) == item.insufficient, "\(item.fen)")
+        }
+    }
 }

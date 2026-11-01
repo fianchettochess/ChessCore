@@ -72,7 +72,7 @@ if let ep = position.capturableEnPassantTarget {
 
 ```swift
 if position.hasInsufficientMaterial {
-    // K vs K, K + single minor vs K, or K+B vs K+B with same-colored bishops
+    // K vs K, K + single minor vs K, or bishops all on the same square color
 }
 ```
 

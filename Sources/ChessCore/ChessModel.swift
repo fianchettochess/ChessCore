@@ -786,8 +786,7 @@ public struct Position: Equatable, Sendable {
     public var hasInsufficientMaterial: Bool {
         var whiteKnights = 0, whiteBishops = 0
         var blackKnights = 0, blackBishops = 0
-        var whiteBishopOnLight = false
-        var blackBishopOnLight = false
+        var bishopsOnLight = false, bishopsOnDark = false
 
         for i in 0..<64 {
             guard let piece = board[i] else { continue }
@@ -799,13 +798,8 @@ public struct Position: Equatable, Sendable {
             case .bishop:
                 let sq = Square.fromIndex(i)
                 let isLight = (sq.file + sq.rank) % 2 == 1
-                if piece.color == .white {
-                    whiteBishops += 1
-                    if isLight { whiteBishopOnLight = true }
-                } else {
-                    blackBishops += 1
-                    if isLight { blackBishopOnLight = true }
-                }
+                if piece.color == .white { whiteBishops += 1 } else { blackBishops += 1 }
+                if isLight { bishopsOnLight = true } else { bishopsOnDark = true }
             case .king:
                 break
             }
@@ -819,11 +813,9 @@ public struct Position: Equatable, Sendable {
         // K+minor vs K
         if whiteMinors == 0 && blackMinors == 1 { return true }
         if whiteMinors == 1 && blackMinors == 0 { return true }
-        // K+B vs K+B on same color
-        if whiteBishops == 1 && blackBishops == 1 && whiteKnights == 0 && blackKnights == 0 {
-            let whiteOnLight = whiteBishopOnLight
-            let blackOnLight = blackBishopOnLight
-            if whiteOnLight == blackOnLight { return true }
+        // Bishops confined to one square color cannot mate either king.
+        if whiteKnights == 0 && blackKnights == 0 && !(bishopsOnLight && bishopsOnDark) {
+            return true
         }
         return false
     }
