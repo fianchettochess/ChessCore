@@ -23,6 +23,9 @@ public enum PGNVariationOrder: Sendable {
 /// Callers building `PGNGame` by hand must carry diagnostics and written offsets.
 public struct PGNLenientLoadReport {
     public let game: Game
+    /// First recognized annotation written for each annotated node, in token order.
+    /// The tree's annotation retains its existing last-wins behavior.
+    public let firstAnnotationsByNodeID: [UUID: MoveAnnotation]
     public let imputedMoves: [PGNImputedMove]
     public let droppedMoveTokens: [String]
     /// Text that the tree cannot safely carry through a rewrite.
@@ -52,6 +55,11 @@ public struct PGNLenientLoadReport {
 }
 
 private final class PGNLoadAccounting {
+    var firstAnnotationsByNodeID: [UUID: MoveAnnotation] = [:]
+    func record(_ annotation: MoveAnnotation?, for node: MoveNode) {
+        guard let annotation else { return }
+        if firstAnnotationsByNodeID[node.id] == nil { firstAnnotationsByNodeID[node.id] = annotation }
+    }
     var dropped: [String] = []
     var uncarried: [String] = []
     var headComments = 0
@@ -94,7 +102,7 @@ extension PGNParser {
         let accounting = PGNLoadAccounting()
         guard let game = try? materialize(pgnGame, maximumTreeNodes: maximumMoveTreeNodes,
                                           rejectsUnparseableMainLine: false, accounting: accounting) else { return nil }
-        return PGNLenientLoadReport(game: game, imputedMoves: [], droppedMoveTokens: accounting.dropped,
+        return PGNLenientLoadReport(game: game, firstAnnotationsByNodeID: accounting.firstAnnotationsByNodeID, imputedMoves: [], droppedMoveTokens: accounting.dropped,
             uncarriedText: accounting.uncarried, headCommentsMovedToBranchPoint: accounting.headComments,
             hasUnterminatedBraceComment: pgnGame.diagnostics.contains(.unterminatedBraceComment),
             mainLineDiffersFromSnapshot: mainLineDiffers(pgnGame, game: game),
@@ -180,7 +188,7 @@ extension PGNParser {
         guard report.droppedMoveTokens.isEmpty && !report.mainLineDiffersFromSnapshot else {
             return loadGameWithReport(from: pgnGame)
         }
-        return PGNLenientLoadReport(game: report.game, imputedMoves: imputed,
+        return PGNLenientLoadReport(game: report.game, firstAnnotationsByNodeID: report.firstAnnotationsByNodeID, imputedMoves: imputed,
             droppedMoveTokens: report.droppedMoveTokens,
             uncarriedText: report.uncarriedText, headCommentsMovedToBranchPoint: report.headCommentsMovedToBranchPoint,
             hasUnterminatedBraceComment: report.hasUnterminatedBraceComment,
@@ -310,6 +318,7 @@ extension PGNParser {
                     )
                 }
                 game.applyMoveFromPGN(move)
+                if let node = game.currentNode { accounting?.record(MoveAnnotation.extract(from: san).annotation, for: node) }
                 materializedNodeCount += 1
             }
         } else {
@@ -419,6 +428,7 @@ extension PGNParser {
 
                 frameHasMove[frameHasMove.count - 1] = true
                 if let existing = siblings.first(where: { $0.move == move }) {
+                    accounting?.record(annotation, for: existing)
                     if let annotation, let old = existing.annotation, old != annotation { accounting?.uncarried.append(san) }
                     if let annotation { existing.annotation = annotation }
                     nodeStack[nodeStack.count - 1] = existing
@@ -430,6 +440,7 @@ extension PGNParser {
                     }
                     let notation = MoveGenerator.algebraicNotation(for: move, in: currentPos, legalMoves: legal)
                     let newNode = MoveNode(move: move, notation: notation, positionBefore: currentPos, parent: parentNode, plyIndex: ply, annotation: annotation)
+                    accounting?.record(annotation, for: newNode)
                     if let parent = parentNode {
                         parent.children.append(newNode)
                     } else {
@@ -447,6 +458,7 @@ extension PGNParser {
                 }
                 if let annotation = MoveAnnotation.from(nag: number),
                    let last = nodeStack.last, let currentNode = last {
+                    accounting?.record(annotation, for: currentNode)
                     currentNode.annotation = annotation
                 }
 

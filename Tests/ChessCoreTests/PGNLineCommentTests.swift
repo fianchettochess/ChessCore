@@ -2,6 +2,25 @@ import XCTest
 @testable import ChessCore
 
 final class PGNLineCommentTests: XCTestCase {
+    func testEscapeLinesAndLiteralPercents() throws {
+        for newline in ["\n", "\r\n", "\r"] {
+            let text = "1. e4" + newline + "% archival { note 0-1" + newline + "e5 2. Nf3"
+            let parsed = try XCTUnwrap(PGNParser.parse(text).first)
+            let report = try XCTUnwrap(PGNParser.loadGameWithReport(from: parsed))
+            XCTAssertEqual(report.game.mainLine.map(\.notation), ["e4", "e5", "Nf3"])
+            XCTAssertTrue(report.droppedMoveTokens.isEmpty)
+            XCTAssertEqual(PGNParser.flatMoves(from: PGNParser.tokenize(text)), ["e4", "e5", "Nf3"])
+        }
+        for (text, expected) in [("1.e4 %note e5", ["e4", "%note", "e5"]),
+                                 ("1.e4\n %note e5", ["e4", "%note", "e5"])] {
+            XCTAssertEqual(PGNParser.flatMoves(from: PGNParser.tokenize(text)), expected)
+        }
+        let text = "1.e4 {inside\n% keep} e5 ; % keep too\n2.Nf3"
+        let parsed = try XCTUnwrap(PGNParser.parse(text).first)
+        XCTAssertEqual(comments(parsed.moveTokens), ["inside\n% keep", " % keep too"])
+        XCTAssertEqual(parsed.moves, ["e4", "e5", "Nf3"])
+        XCTAssertTrue(PGNParser.tokenize("% end of file").isEmpty)
+    }
     private let mainline = ["e4", "e5", "Nf3", "Nc6"]
     private func comments(_ tokens: [PGNToken]) -> [String] {
         tokens.compactMap { if case .comment(let text) = $0 { return text }; return nil }

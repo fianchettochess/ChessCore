@@ -11,6 +11,17 @@ breaking `0.10.0`.
 
 Published tags are never moved or re-cut.
 
+## [0.14.1] — 2026-11-01
+
+### Added
+
+- Lenient load reports expose the first written annotation for each node, while
+  retaining the tree's existing annotation behavior.
+
+### Fixed
+
+- PGN escape lines beginning with `%` no longer produce move tokens.
+
 ## [0.14.0] — 2026-11-01
 
 ### Changed

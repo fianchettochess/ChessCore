@@ -218,7 +218,7 @@ public enum PGNParser {
                 // manufacture a new record from a discarded game's comment.
                 // Semicolons end a physical line only outside brace comments;
                 // opening braces inside a brace comment do not nest.
-                for character in line {
+                for character in (!inBraceComment && line.hasPrefix("%") ? line.prefix(0) : line[...]) {
                     if inBraceComment {
                         if character == "}" { inBraceComment = false }
                     } else if character == "{" {
@@ -330,7 +330,11 @@ public enum PGNParser {
         while i < moveText.endIndex {
             let ch = moveText[i]
 
-            if ch == "(" {
+            if ch == "%" && (i == moveText.startIndex || moveText[moveText.index(before: i)].isNewline) {
+                while i < moveText.endIndex && !moveText[i].isNewline {
+                    i = moveText.index(after: i)
+                }
+            } else if ch == "(" {
                 if writtenLines.count <= maximumVariationDepth {
                     let parent = writtenLines[writtenLines.count - 1]
                     var lastPosition: Int?

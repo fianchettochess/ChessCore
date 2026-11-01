@@ -2,6 +2,58 @@ import XCTest
 @testable import ChessCore
 
 final class PGNLenientReportTests: XCTestCase {
+    func testFirstAnnotationsSurviveConflictsAndMergedVariations() throws {
+        let parsed = try XCTUnwrap(PGNParser.parse("1. e4! $2 (1. e4?? $4) e5 (1... e5 $3) 2. Nf3").first)
+        let report = try XCTUnwrap(PGNParser.loadGameWithReport(from: parsed))
+        let e4 = try XCTUnwrap(report.game.rootChildren.first)
+        let e5 = try XCTUnwrap(e4.children.first)
+        XCTAssertEqual(report.firstAnnotationsByNodeID[e4.id], .good)
+        XCTAssertEqual(e4.annotation, .blunder)
+        XCTAssertEqual(report.firstAnnotationsByNodeID[e5.id], .brilliant)
+        XCTAssertEqual(e5.annotation, .brilliant)
+        XCTAssertEqual(report.firstAnnotationsByNodeID.count, 2)
+        let repaired = try XCTUnwrap(PGNParser.loadGameWithImputation(from: parsed))
+        let repairedE4 = try XCTUnwrap(repaired.game.rootChildren.first)
+        XCTAssertEqual(repaired.firstAnnotationsByNodeID[repairedE4.id], .good)
+
+        var flat = PGNGame()
+        flat.moves = ["e4!", "e5?"]
+        let flatReport = try XCTUnwrap(PGNParser.loadGameWithReport(from: flat))
+        let flatE4 = try XCTUnwrap(flatReport.game.rootChildren.first)
+        XCTAssertEqual(flatReport.firstAnnotationsByNodeID[flatE4.id], .good)
+        XCTAssertNil(flatE4.annotation)
+    }
+
+    func testTransposedPositionsKeepDistinctAnnotations() throws {
+        let parsed = try XCTUnwrap(PGNParser.parse("1. Nf3 (1. d4 d5 2. Nf3! Nf6) d5 2. d4? Nf6").first)
+        let report = try XCTUnwrap(PGNParser.loadGameWithReport(from: parsed))
+        let knightLine = try XCTUnwrap(report.game.rootChildren.first { $0.notation == "Nf3" })
+        let pawnLine = try XCTUnwrap(report.game.rootChildren.first { $0.notation == "d4" })
+        let pawnMove = try XCTUnwrap(knightLine.children.first?.children.first)
+        let knightMove = try XCTUnwrap(pawnLine.children.first?.children.first)
+        XCTAssertEqual(pawnMove.positionAfter.fen.split(separator: " ").first, knightMove.positionAfter.fen.split(separator: " ").first)
+        XCTAssertNotEqual(pawnMove.id, knightMove.id)
+        XCTAssertEqual(report.firstAnnotationsByNodeID[pawnMove.id], .mistake)
+        XCTAssertEqual(report.firstAnnotationsByNodeID[knightMove.id], .good)
+    }
+
+    func testAnnotationAccountingGrowth() throws {
+        func elapsed(_ count: Int) throws -> TimeInterval {
+            var game = PGNGame()
+            let cycle = ["Nf3!", "Nf6!", "Ng1!", "Ng8!"]
+            game.moveTokens = (0..<count).map { .move(cycle[$0 % 4]) }
+            let start = ProcessInfo.processInfo.systemUptime
+            let report = try XCTUnwrap(PGNParser.loadGameWithReport(from: game))
+            let duration = ProcessInfo.processInfo.systemUptime - start
+            XCTAssertEqual(report.firstAnnotationsByNodeID.count, count)
+            return duration
+        }
+        _ = try elapsed(100)
+        let small = try elapsed(2_000)
+        let large = try elapsed(4_000)
+        print("Annotation accounting doubling: 2000 plies \(small)s, 4000 plies \(large)s, ratio \(large / small)")
+        XCTAssertLessThan(large / small, 3.8)
+    }
     func testWrittenMoveNumbersGate() throws {
         let cases: [(String, Bool)] = [
             ("1. e4 {c} 1. ... e5 2. Nf3", true), ("1. e4 1 ... e5", true), ("1 . e4 1 ... e5 2 . Nf3", true),
