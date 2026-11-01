@@ -66,6 +66,46 @@ final class MoveGeneratorTests: XCTestCase {
         assertPerft("rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8", [44, 1486, 62379])
     }
 
+    func testMirroredPositionFourPerftPreservesCastlingAndPromotionMovesForBlack() {
+        // https://www.chessprogramming.org/Perft_Results#Position_4
+        assertPerft("r2q1rk1/pP1p2pp/Q4n2/bbp1p3/Np6/1B3NBn/pPPP1PPP/R3K2R b KQ - 0 1", [6, 264, 9467])
+    }
+
+    func testPositionSixPerftKeepsLegalMiddlegameMovesAvailable() {
+        // https://www.chessprogramming.org/Perft_Results#Position_6
+        assertPerft("r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10", [46, 2079, 89890])
+    }
+
+    func testPerftRejectsEnPassantThatExposesTheKingToCheck() {
+        // https://github.com/freeeve/pgn/blob/v3/perft_test.go
+        assertPerft("8/8/8/8/k2Pp2Q/8/8/3K4 b - d3 0 1", [6, 136])
+    }
+
+    func testPromotionCapturingCornerRookRemovesCastlingRightForBothColors() throws {
+        let cases: [(fen: String, from: String, to: String, white: Bool)] = [
+            ("r3k2r/1P6/8/8/8/8/8/4K3 w kq - 0 1", "b7", "a8", false),
+            ("4k3/8/8/8/8/8/1p6/R3K2R b KQ - 0 1", "b2", "a1", true)
+        ]
+        for testCase in cases {
+            let position = try XCTUnwrap(Position(fen: testCase.fen))
+            let promotions = MoveGenerator.legalMoves(for: position).filter {
+                $0.from.algebraic == testCase.from && $0.to.algebraic == testCase.to && $0.promotion != nil
+            }
+            XCTAssertEqual(promotions.count, 4, testCase.fen)
+            for move in promotions {
+                var next = position
+                MoveGenerator.applyMoveUnchecked(&next, move)
+                if testCase.white {
+                    XCTAssertFalse(next.castlingRights.whiteQueenside, testCase.fen)
+                    XCTAssertTrue(next.castlingRights.whiteKingside, testCase.fen)
+                } else {
+                    XCTAssertFalse(next.castlingRights.blackQueenside, testCase.fen)
+                    XCTAssertTrue(next.castlingRights.blackKingside, testCase.fen)
+                }
+            }
+        }
+    }
+
     func testSANDisambiguationAndCheck() {
         // Two knights can reach d2; SAN must disambiguate by file/rank.
         let pos = Position(fen: "r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1")!
