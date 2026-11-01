@@ -36,6 +36,17 @@ final class PGNLenientReportTests: XCTestCase {
         XCTAssertFalse(PGNGame().hasInconsistentMoveNumbers)
     }
 
+    /// Gates that a hand replay can tell notation from an unreadable move. Treating
+    /// `N` as a bad move would cut an imported line short and lose the rest of it.
+    func testMoveTextNotationIsNotAMove() {
+        for word in ["N", "+=", "e.p.", "...", "!", "1", "1/2"] {
+            XCTAssertTrue(PGNParser.isMoveTextNotation(word), word)
+        }
+        for word in ["e4", "Nf3", "O-O", "Zz9", "--"] {
+            XCTAssertFalse(PGNParser.isMoveTextNotation(word), word)
+        }
+    }
+
     func testReportDistinguishesLostMovesFromNoiseAndMergedVariations() throws {
         let cases: [(String, [String])] = [
             ("1. e4 Zz9 2. d3 d5", ["Zz9", "d3"]),

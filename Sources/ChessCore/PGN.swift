@@ -197,6 +197,13 @@ extension PGNParser {
     // The compatibility loader also skips these unplayable main-line words.
     // They are notation, not moves, even where the legacy variation loader
     // abandons a line on encountering them.
+    /// True for a word in move text that is notation, not a move: markup such as
+    /// `N`, `+=` or `e.p.`, a detached glyph, a bare move number, or a result.
+    /// A caller replaying tokens by hand skips these, as the loaders do.
+    public static func isMoveTextNotation(_ san: String) -> Bool {
+        isReportNoise(san)
+    }
+
     static func isReportNoise(_ san: String) -> Bool {
         let cleaned = MoveAnnotation.extract(from: san).cleaned
         return isMoveTextNoise(cleaned) || (!cleaned.isEmpty && cleaned.allSatisfy { $0.isASCII && $0.isNumber })

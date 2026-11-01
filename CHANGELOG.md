@@ -11,6 +11,13 @@ breaking `0.10.0`.
 
 Published tags are never moved or re-cut.
 
+## [0.13.2] — 2026-11-01
+
+### Added
+
+- `PGNParser.isMoveTextNotation(_:)`: whether a move-text word is notation rather
+  than a move, for callers that replay tokens by hand.
+
 ## [0.13.1] — 2026-10-31
 
 ### Fixed
