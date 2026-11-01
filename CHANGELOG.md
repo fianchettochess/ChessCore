@@ -11,6 +11,13 @@ breaking `0.10.0`.
 
 Published tags are never moved or re-cut.
 
+## [0.13.1] — 2026-10-31
+
+### Fixed
+
+- Black's move marker written as its own word (`1. ... e5`, `1 ... e5`) no
+  longer reads as an inconsistent move number.
+
 ## [0.13.0] — 2026-10-31
 
 ### Added

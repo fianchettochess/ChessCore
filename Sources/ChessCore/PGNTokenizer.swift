@@ -334,8 +334,13 @@ public enum PGNParser {
                     i = moveText.index(after: i)
                 }
                 let word = String(moveText[start..<i])
-                if variationDepth == 0, let position = writtenMovePosition(word) {
+                if variationDepth == 0, var position = writtenMovePosition(word) {
                     if position == Int.max { hasInconsistentMoveNumbers = true }
+                    // "1. ... e5" and "1 ... e5" write Black's marker as its own word.
+                    else if word.allSatisfy({ $0.isNumber || $0 == "." }) {
+                        let next = moveText[i...].drop(while: \.isWhitespace)
+                        if next.hasPrefix("...") || next.hasPrefix("…") { position += 1 }
+                    }
                     if let previous = previousWrittenPosition,
                        position - previous != interveningMoves {
                         hasInconsistentMoveNumbers = true

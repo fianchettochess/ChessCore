@@ -4,6 +4,8 @@ import XCTest
 final class PGNLenientReportTests: XCTestCase {
     func testWrittenMoveNumbersGate() throws {
         let cases: [(String, Bool)] = [
+            ("1. e4 {c} 1. ... e5 2. Nf3", true), ("1. e4 1 ... e5", true), ("1 . e4 1 ... e5 2 . Nf3", true),
+            ("1. e4 1. ... e5 2. Nf3 2. ... Nc6", true), ("1. e4 2. ... e5", false),
             ("1. e4 e5 2. Nf3 Nc6 3. Bc4 4. Nf6", false),
             ("1. e4 e5 2. Nf3 3. Nc6 4. Bc4", false),
             ("1. d4 2. d5 3. c4", false), ("1. e4 2. e5", false),
