@@ -13,7 +13,7 @@ final class PGNFENExportTests: XCTestCase {
 
     func testInvalidTagNamesAreSkipped() {
         var tags = PGNGame.OrderedTags()
-        for key in ["Ev\nent", "]\n\n1. d4", "_invalid"] { tags[key] = "injected" }
+        for key in ["Ev\nent", "]\n\n1. d4"] { tags[key] = "injected" }
         tags["Valid_Name"] = "kept"
         let text = PGNExporter.export(game: Game(), tags: tags)
         XCTAssertFalse(text.contains("injected"))

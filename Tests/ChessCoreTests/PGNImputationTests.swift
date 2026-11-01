@@ -2,6 +2,17 @@ import XCTest
 @testable import ChessCore
 
 final class PGNImputationTests: XCTestCase {
+    func testImputationRequiresMoveShapedToken() throws {
+        for (token, expected) in [("Zz8", true), ("Zz9", true), ("12:34", false), ("+0.38", false)] {
+            XCTAssertEqual(PGNParser.hasImputationShape(token), expected, token)
+        }
+        for (token, expected) in [("12:34", false), ("+0.38", false), ("Zz8", true), ("Zz9", false)] {
+            let input = try XCTUnwrap(PGNParser.parse("1. d4 \(token) 2. Nf3 e4 *").first)
+            let report = try XCTUnwrap(PGNParser.loadGameWithImputation(from: input))
+            XCTAssertEqual(!report.imputedMoves.isEmpty, expected, token)
+        }
+    }
+
     func testUniqueContinuationReportsImputationSoStoredMovesAreNotSilentlyReplaced() throws {
         let parsed = try XCTUnwrap(PGNParser.parse("1. d4 Zz8 2. Nf3 e4 *").first)
         let report = try XCTUnwrap(PGNParser.loadGameWithImputation(from: parsed))

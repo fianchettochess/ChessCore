@@ -21,7 +21,8 @@ Published tags are never moved or re-cut.
 ### Changed
 
 - Default export includes setup and FEN tags for nonstandard starts.
-- Tag values are normalized to one line, and invalid tag names are skipped.
+- Tag values are normalized to one line; tag names are skipped only if empty,
+  containing a line break, or containing a double quote.
 
 ## [0.12.0] — 2026-10-31
 

@@ -2,6 +2,38 @@ import XCTest
 @testable import ChessCore
 
 final class PGNLenientReportTests: XCTestCase {
+    func testWrittenMoveNumbersGate() throws {
+        let cases: [(String, Bool)] = [
+            ("1. e4 e5 2. Nf3 Nc6 3. Bc4 4. Nf6", false),
+            ("1. e4 e5 2. Nf3 3. Nc6 4. Bc4", false),
+            ("1. d4 2. d5 3. c4", false), ("1. e4 2. e5", false),
+            ("1. e4 999999999999999999999999. e5", false),
+            ("1. e4 e5 2. Nf3", true), ("1. e4 {c} 1... e5 2. Nf3", true),
+            ("1 e4 e5 2 Nf3", true), ("1.e4 e5 2.Nf3", true),
+            ("1. e4 (1. d4 d5 2. c4) e5 2. Nf3", true),
+            ("1. e4 e5 2. Nf3 N Nc6 3. Bb5", true)
+        ]
+        for (text, expected) in cases {
+            let parsed = try XCTUnwrap(PGNParser.parse(text).first)
+            XCTAssertTrue(parsed.diagnostics.isEmpty, text)
+            let scanned = PGNParser.tokenizeWithDiagnostics(text)
+            XCTAssertEqual(scanned.hasInconsistentMoveNumbers, !expected, text)
+            XCTAssertEqual(parsed.hasInconsistentMoveNumbers, !expected, text)
+            let report = try XCTUnwrap(PGNParser.loadGameWithReport(from: parsed))
+            XCTAssertEqual(report.hasInconsistentMoveNumbers, !expected, text)
+            XCTAssertEqual(report.canReplaceStoredText, expected, text)
+            var manual = PGNGame()
+            manual.moveTokens = scanned.tokens
+            manual.diagnostics = scanned.diagnostics
+            manual.hasInconsistentMoveNumbers = scanned.hasInconsistentMoveNumbers
+            XCTAssertEqual(try XCTUnwrap(PGNParser.loadGameWithReport(from: manual)).canReplaceStoredText, expected, text)
+        }
+        let fen = "[FEN \"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 20\"]\n\n20... Nf6 21. Nf3"
+        let game = try XCTUnwrap(PGNParser.parse(fen).first)
+        XCTAssertTrue(try XCTUnwrap(PGNParser.loadGameWithReport(from: game)).canReplaceStoredText)
+        XCTAssertFalse(PGNGame().hasInconsistentMoveNumbers)
+    }
+
     func testReportDistinguishesLostMovesFromNoiseAndMergedVariations() throws {
         let cases: [(String, [String])] = [
             ("1. e4 Zz9 2. d3 d5", ["Zz9", "d3"]),

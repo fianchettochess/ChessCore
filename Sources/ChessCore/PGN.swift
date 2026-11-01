@@ -24,14 +24,16 @@ public struct PGNLenientLoadReport {
     public let mainLineDiffersFromSnapshot: Bool
     public let exceedsExportVariationDepth: Bool
     public let hasUnrecognizedSetupTag: Bool
+    public let hasInconsistentMoveNumbers: Bool
 
     /// Whether moves and the start position can safely replace stored text.
-    /// This does not cover comments or NAGs the exporter cannot carry. For a
-    /// stored movetext row, use `tokenizeWithDiagnostics`, not `parse(text).first`:
+    /// This does not cover comments or NAGs the exporter cannot carry.
+    /// Tags with names on one line and no double quote are preserved by the exporter.
+    /// For a stored movetext row, use `tokenizeWithDiagnostics`, not `parse(text).first`:
     /// parsing may split at a bracket-only line or skip an oversized record.
     public var canReplaceStoredText: Bool {
         droppedMoveTokens.isEmpty && !hasUnterminatedBraceComment && !mainLineDiffersFromSnapshot
-            && !exceedsExportVariationDepth && !hasUnrecognizedSetupTag && imputedMoves.isEmpty
+            && !exceedsExportVariationDepth && !hasUnrecognizedSetupTag && !hasInconsistentMoveNumbers && imputedMoves.isEmpty
     }
 }
 
@@ -77,13 +79,17 @@ extension PGNParser {
             hasUnterminatedBraceComment: pgnGame.diagnostics.contains(.unterminatedBraceComment),
             mainLineDiffersFromSnapshot: mainLineDiffers(pgnGame, game: game),
             exceedsExportVariationDepth: exceedsExportDepth(game),
-            hasUnrecognizedSetupTag: pgnGame.tags.orderedKeys.contains { $0 != "FEN" && $0.uppercased() == "FEN" })
+            hasUnrecognizedSetupTag: pgnGame.tags.orderedKeys.contains { $0 != "FEN" && $0.uppercased() == "FEN" },
+            hasInconsistentMoveNumbers: pgnGame.hasInconsistentMoveNumbers)
     }
 
     /// Opt in to conservative main-line repair. An unreadable token is replaced
     /// only if exactly one legal move permits every subsequent main-line move.
     /// Retain the original movetext: every substitution is reported, and legal
     /// continuation alone cannot establish the move that was actually played.
+    /// An imputation is a reading for display, never to be stored. A stray
+    /// well-formed move or a legally corrupted move can yield a wrong unique
+    /// reading, for example `...19. Qd1 Qb3 20. Qb1 Nc3` with an extra Qd1.
     public static func loadGameWithImputation(from pgnGame: PGNGame) -> PGNLenientLoadReport? {
         guard var position = startingPosition(for: pgnGame) else { return nil }
         let flat = pgnGame.moveTokens.isEmpty
@@ -113,7 +119,7 @@ extension PGNParser {
                 continue
             }
             let cleaned = MoveAnnotation.extract(from: san).cleaned
-            guard (2...7).contains(cleaned.count), let last = cleaned.last,
+            guard (2...7).contains(cleaned.count), hasImputationShape(cleaned), let last = cleaned.last,
                   ("1"..."8").contains(String(last)), indices.count - offset - 1 >= 2 else { break }
             func tailReplays(_ start: Position) -> Bool {
                 var trial = start
@@ -158,7 +164,15 @@ extension PGNParser {
             hasUnterminatedBraceComment: report.hasUnterminatedBraceComment,
             mainLineDiffersFromSnapshot: report.mainLineDiffersFromSnapshot,
             exceedsExportVariationDepth: report.exceedsExportVariationDepth,
-            hasUnrecognizedSetupTag: report.hasUnrecognizedSetupTag)
+            hasUnrecognizedSetupTag: report.hasUnrecognizedSetupTag,
+            hasInconsistentMoveNumbers: report.hasInconsistentMoveNumbers)
+    }
+
+    static func hasImputationShape(_ token: String) -> Bool {
+        guard let first = token.utf8.first,
+              (65...90).contains(first) || (97...122).contains(first) else { return false }
+        return token.utf8.allSatisfy { (65...90).contains($0) || (97...122).contains($0)
+            || (48...57).contains($0) || [61, 45, 43].contains($0) }
     }
 
     /// Materialize one parsed PGN with an explicit whole-tree resource budget.
@@ -183,7 +197,7 @@ extension PGNParser {
     // The compatibility loader also skips these unplayable main-line words.
     // They are notation, not moves, even where the legacy variation loader
     // abandons a line on encountering them.
-    private static func isReportNoise(_ san: String) -> Bool {
+    static func isReportNoise(_ san: String) -> Bool {
         let cleaned = MoveAnnotation.extract(from: san).cleaned
         return isMoveTextNoise(cleaned) || (!cleaned.isEmpty && cleaned.allSatisfy { $0.isASCII && $0.isNumber })
             || cleaned == "1/2" || cleaned == "½-½"
@@ -522,12 +536,7 @@ extension PGNExporter {
     }
 
     private static func isValidTagName(_ name: String) -> Bool {
-        guard let first = name.utf8.first,
-              (65...90).contains(first) || (97...122).contains(first) || (48...57).contains(first) else { return false }
-        return name.utf8.allSatisfy { byte in
-            (65...90).contains(byte) || (97...122).contains(byte) || (48...57).contains(byte)
-                || [95, 43, 35, 61, 58, 45].contains(byte)
-        }
+        !name.isEmpty && !name.contains(where: { $0.isNewline || $0 == "\"" })
     }
 
     public static func moveText(for rootChildren: [MoveNode]) -> String {

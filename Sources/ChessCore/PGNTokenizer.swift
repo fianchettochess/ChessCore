@@ -26,6 +26,8 @@ public struct PGNGame: Identifiable, Sendable {
     public var result: String? = nil
     public var moveTokens: [PGNToken] = []
     public var diagnostics: [PGNDiagnostic] = []
+    /// Written main-line move numbers disagree with the intervening moves.
+    public var hasInconsistentMoveNumbers: Bool = false
 
     public init() {}
 
@@ -189,6 +191,7 @@ public enum PGNParser {
                         current.moves = flatMoves(from: tokens)
                         current.moveTokens = tokens
                         current.result = scanned.result
+                        current.hasInconsistentMoveNumbers = scanned.hasInconsistentMoveNumbers
                         current.diagnostics.append(contentsOf: scanned.diagnostics)
                         games.append(current)
                     }
@@ -245,6 +248,7 @@ public enum PGNParser {
             current.moves = flatMoves(from: tokens)
             current.moveTokens = tokens
             current.result = scanned.result
+            current.hasInconsistentMoveNumbers = scanned.hasInconsistentMoveNumbers
             current.diagnostics.append(contentsOf: scanned.diagnostics)
             games.append(current)
         }
@@ -270,24 +274,27 @@ public enum PGNParser {
     }
 
     /// Tokenize move text and return any diagnostics discovered while scanning it.
-    /// Carry both values into a manually constructed `PGNGame` so loading can
+    /// Carry all three values into a manually constructed `PGNGame` so loading can
     /// report text lost to an unterminated comment.
     public static func tokenizeWithDiagnostics(
         _ moveText: String
-    ) -> (tokens: [PGNToken], diagnostics: [PGNDiagnostic]) {
+    ) -> (tokens: [PGNToken], diagnostics: [PGNDiagnostic], hasInconsistentMoveNumbers: Bool) {
         let scanned = scan(moveText)
-        return (scanned.tokens, scanned.diagnostics)
+        return (scanned.tokens, scanned.diagnostics, scanned.hasInconsistentMoveNumbers)
     }
 
     // Result markers must be read by the same lexer as moves: prose in either
     // comment syntax, or a result inside a variation, cannot end the mainline.
     private static func scan(
         _ moveText: String
-    ) -> (tokens: [PGNToken], result: String?, diagnostics: [PGNDiagnostic]) {
+    ) -> (tokens: [PGNToken], result: String?, diagnostics: [PGNDiagnostic], hasInconsistentMoveNumbers: Bool) {
         var tokens: [PGNToken] = []
         var result: String?
         var diagnostics: [PGNDiagnostic] = []
         var variationDepth = 0
+        var previousWrittenPosition: Int?
+        var interveningMoves = 0
+        var hasInconsistentMoveNumbers = false
         var i = moveText.startIndex
 
         while i < moveText.endIndex {
@@ -327,6 +334,15 @@ public enum PGNParser {
                     i = moveText.index(after: i)
                 }
                 let word = String(moveText[start..<i])
+                if variationDepth == 0, let position = writtenMovePosition(word) {
+                    if position == Int.max { hasInconsistentMoveNumbers = true }
+                    if let previous = previousWrittenPosition,
+                       position - previous != interveningMoves {
+                        hasInconsistentMoveNumbers = true
+                    }
+                    previousWrittenPosition = position
+                    interveningMoves = 0
+                }
                 if word.hasPrefix("$"), let nagNumber = Int(word.dropFirst()) {
                     tokens.append(.nag(nagNumber))
                 } else if isResult(word) {
@@ -335,12 +351,13 @@ public enum PGNParser {
                     let stripped = stripMoveNumberPrefix(word)
                     if !stripped.isEmpty {
                         tokens.append(.move(stripped))
+                        if variationDepth == 0 && !isReportNoise(stripped) { interveningMoves += 1 }
                     }
                 }
             }
         }
 
-        return (tokens, result, diagnostics)
+        return (tokens, result, diagnostics, hasInconsistentMoveNumbers)
     }
 
     public static func flatMoves(from tokens: [PGNToken]) -> [String] {
@@ -957,6 +974,18 @@ public enum PGNParser {
 
     private static func isResult(_ token: String) -> Bool {
         ["1-0", "0-1", "1/2-1/2", "*"].contains(token)
+    }
+
+    // Bare numbers and dotted prefixes are accepted by the existing lexer.
+    private static func writtenMovePosition(_ word: String) -> Int? {
+        let digits = word.prefix { $0.isASCII && $0.isNumber }
+        guard !digits.isEmpty else { return nil }
+        let rest = word.dropFirst(digits.count)
+        guard rest.isEmpty || rest.first == "." else { return nil }
+        // An unrepresentable or zero number cannot establish a safe position.
+        guard let number = Int(digits), number > 0, number <= Int.max / 2 else { return Int.max }
+        let dots = rest.prefix { $0 == "." }.count
+        return 2 * (number - 1) + (dots >= 3 ? 1 : 0)
     }
 
     private static func stripMoveNumberPrefix(_ word: String) -> String {

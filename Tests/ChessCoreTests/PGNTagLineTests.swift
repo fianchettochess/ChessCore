@@ -2,6 +2,24 @@ import XCTest
 @testable import ChessCore
 
 final class PGNTagLineTests: XCTestCase {
+    func testTagNamesRoundTripAndCannotInjectMoves() throws {
+        let game = try XCTUnwrap(PGNParser.loadGame(from: "1. e4 e5 *"))
+        for name in ["Foo.Bar", "White Elo", "Événement", "日本語", "_Private", "!", "a]b"] {
+            var tags = PGNGame.OrderedTags()
+            tags[name] = "value"
+            let parsed = try XCTUnwrap(PGNParser.parse(PGNExporter.export(game: game, tags: tags)).first)
+            XCTAssertEqual(parsed.tags[name], "value", name)
+        }
+        for name in ["", "Ev\nent", "Event\" \"x\"]\n1. d4 d5\n[Injected", "quo\"te"] {
+            var tags = PGNGame.OrderedTags()
+            tags[name] = "value"
+            let exported = PGNExporter.export(game: game, tags: tags)
+            XCTAssertFalse(exported.contains("value"), name)
+            let parsed = try XCTUnwrap(PGNParser.parse(exported).first)
+            XCTAssertEqual(try XCTUnwrap(PGNParser.loadGame(from: parsed)).mainLine.map(\.notation), ["e4", "e5"], name)
+        }
+    }
+
     func testTagLineBreaksCannotInjectMovesAndReplaceStoredLine() throws {
         let game = try XCTUnwrap(PGNParser.loadGame(from: "1. e4 e5 *"))
         var tags = PGNGame.OrderedTags()
