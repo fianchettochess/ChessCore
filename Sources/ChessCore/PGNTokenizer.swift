@@ -189,9 +189,7 @@ public enum PGNParser {
                         current.moves = flatMoves(from: tokens)
                         current.moveTokens = tokens
                         current.result = scanned.result
-                        if scanned.hasUnterminatedComment {
-                            current.diagnostics.append(.unterminatedBraceComment)
-                        }
+                        current.diagnostics.append(contentsOf: scanned.diagnostics)
                         games.append(current)
                     }
                     current = PGNGame()
@@ -247,9 +245,7 @@ public enum PGNParser {
             current.moves = flatMoves(from: tokens)
             current.moveTokens = tokens
             current.result = scanned.result
-            if scanned.hasUnterminatedComment {
-                current.diagnostics.append(.unterminatedBraceComment)
-            }
+            current.diagnostics.append(contentsOf: scanned.diagnostics)
             games.append(current)
         }
 
@@ -273,14 +269,24 @@ public enum PGNParser {
         scan(moveText).tokens
     }
 
+    /// Tokenize move text and return any diagnostics discovered while scanning it.
+    /// Carry both values into a manually constructed `PGNGame` so loading can
+    /// report text lost to an unterminated comment.
+    public static func tokenizeWithDiagnostics(
+        _ moveText: String
+    ) -> (tokens: [PGNToken], diagnostics: [PGNDiagnostic]) {
+        let scanned = scan(moveText)
+        return (scanned.tokens, scanned.diagnostics)
+    }
+
     // Result markers must be read by the same lexer as moves: prose in either
     // comment syntax, or a result inside a variation, cannot end the mainline.
     private static func scan(
         _ moveText: String
-    ) -> (tokens: [PGNToken], result: String?, hasUnterminatedComment: Bool) {
+    ) -> (tokens: [PGNToken], result: String?, diagnostics: [PGNDiagnostic]) {
         var tokens: [PGNToken] = []
         var result: String?
-        var hasUnterminatedComment = false
+        var diagnostics: [PGNDiagnostic] = []
         var variationDepth = 0
         var i = moveText.startIndex
 
@@ -302,7 +308,7 @@ public enum PGNParser {
                     tokens.append(.comment(comment))
                     i = moveText.index(after: end)
                 } else {
-                    hasUnterminatedComment = true
+                    diagnostics.append(.unterminatedBraceComment)
                     i = moveText.endIndex
                 }
             } else if ch == ";" {
@@ -334,7 +340,7 @@ public enum PGNParser {
             }
         }
 
-        return (tokens, result, hasUnterminatedComment)
+        return (tokens, result, diagnostics)
     }
 
     public static func flatMoves(from tokens: [PGNToken]) -> [String] {
