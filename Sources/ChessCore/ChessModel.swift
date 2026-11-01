@@ -530,7 +530,7 @@ public struct Position: Equatable, Sendable {
     }
 
     public init?(fen: String) {
-        let parts = fen.split(separator: " ", omittingEmptySubsequences: false)
+        let parts = fen.split(whereSeparator: \.isWhitespace)
         // Accept either a complete six-field FEN or the four-field prefix
         // `positionKey` produces (placement, side, castling, en passant). A
         // five-field or overlong value is neither representation, and
@@ -539,6 +539,8 @@ public struct Position: Equatable, Sendable {
 
         self.init()
 
+        // Keep ignoring empty rank segments, including a trailing slash, so
+        // previously accepted stored positions can still be restored.
         let ranks = parts[0].split(separator: "/")
         guard ranks.count == 8 else { return nil }
 

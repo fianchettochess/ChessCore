@@ -562,6 +562,14 @@ final class NotationAndBookTests: XCTestCase {
 
     // MARK: - SetUp/FEN start-position round-trip
 
+    func testPastedWhitespaceInFENTagDoesNotLosePGNStartAndMoves() throws {
+        let fen = "8/8/8/4k3/8/8/4K3/7R w - - 0 1"
+        let pgn = "[FEN \"  8/8/8/4k3/8/8/4K3/7R  w - - 0 1  \"]\n\n1. Rh5+ Kd4 *"
+        let game = try XCTUnwrap(PGNParser.loadGame(from: pgn))
+        XCTAssertEqual(game.startPosition.fen, fen)
+        XCTAssertEqual(game.mainLine.map(\.notation), ["Rh5+", "Kd4"])
+    }
+
     func testLoadGameHonorsFENStartPosition() {
         // A K+R vs K endgame start: SAN below is only legal from THIS position,
         // so a loader that ignores the FEN tag cannot parse a single move.

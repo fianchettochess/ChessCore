@@ -18,6 +18,28 @@ final class ChessModelTests: XCTestCase {
         XCTAssertEqual(pos?[Square(algebraic: "c6")!], Piece(type: .knight, color: .black))
     }
 
+    func testPastedFENWhitespaceDoesNotPreventLoadingThePosition() {
+        let placement = "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R"
+        let expected = "\(placement) b KQkq - 2 3"
+        let cases = [
+            " \(expected)", "\(expected) ",
+            "\(placement)  b  KQkq  -  2  3",
+            "\n\t\(placement)\tb\u{00A0}KQkq\n-\t2 3\r\n"
+        ]
+        for fen in cases {
+            XCTAssertEqual(Position(fen: fen)?.fen, expected, "Pasted FEN: \(fen.debugDescription)")
+        }
+        XCTAssertEqual(Position(fen: " \(placement)  b KQkq - ")?.fen,
+                       "\(placement) b KQkq - 0 1")
+    }
+
+    func testEmptyRankSegmentsRemainToleratedSoStoredPositionsRestore() {
+        let expected = "8/8/8/8/8/8/8/8 w - - 0 1"
+        for placement in ["8/8/8/8/8/8/8/8/", "8/8/8//8/8/8/8/8"] {
+            XCTAssertEqual(Position(fen: "\(placement) w - - 0 1")?.fen, expected)
+        }
+    }
+
     func testInvalidFENRejected() {
         XCTAssertNil(Position(fen: "not a fen"))
         XCTAssertNil(Position(fen: "rnbqkbnr/pppppppp/8/8/8 w KQkq - 0 1")) // too few ranks
