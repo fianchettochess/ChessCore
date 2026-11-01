@@ -11,6 +11,22 @@ breaking `0.10.0`.
 
 Published tags are never moved or re-cut.
 
+## [0.14.0] — 2026-11-01
+
+### Changed
+
+- Reading: text written by 0.11.4, which places a sub-variation before the next
+  move of its line, now reads as written when move numbers decide it. Standard
+  PGN reads as before. Numberless text legal in both orders reads standard.
+
+### Added
+
+- `PGNLenientLoadReport`: uncertain variation placement and `uncarriedText`, both
+  included in `canReplaceStoredText`. A row with text the exporter can't carry,
+  such as a pre-game comment or an unmapped NAG, is not safe to rewrite.
+- `PGNGame.variationWrittenOffsets`, and a labelled accessor carrying them for
+  callers that build a `PGNGame` by hand.
+
 ## [0.13.2] — 2026-11-01
 
 ### Added
