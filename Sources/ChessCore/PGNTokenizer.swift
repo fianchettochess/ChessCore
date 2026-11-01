@@ -166,7 +166,10 @@ public enum PGNParser {
         // Foundation `components(separatedBy: .newlines)` (a String copy per
         // line + CharacterSet). Normalize physical newline dialects while
         // retaining the boundaries required by semicolon comments.
-        let lines = pgn.split(omittingEmptySubsequences: false, whereSeparator: { $0.isNewline })
+        // A BOM belongs to the document encoding, not the first tag or move.
+        let start = pgn.unicodeScalars.first == "\u{FEFF}"
+            ? pgn.unicodeScalars.index(after: pgn.startIndex) : pgn.startIndex
+        let lines = pgn[start...].split(omittingEmptySubsequences: false, whereSeparator: { $0.isNewline })
         for (lineIndex, line) in lines.enumerated() {
             let trimmed = line.trimmingCharacters(in: CharacterSet.whitespaces)
             defer { previousLineWasBlank = trimmed.isEmpty }

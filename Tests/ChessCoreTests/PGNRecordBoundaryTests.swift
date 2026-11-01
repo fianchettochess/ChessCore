@@ -2,6 +2,27 @@ import XCTest
 @testable import ChessCore
 
 final class PGNRecordBoundaryTests: XCTestCase {
+    func testLeadingBOMDoesNotLoseFirstGameTagsOrChangeParsedGames() throws {
+        for newline in ["\n", "\r\n"] {
+            let text = ["[Event \"First\"]", "[White \"Alice\"]", "", "1.e4 {note} e5 1-0", "",
+                        "[Event \"Second\"]", "[Black \"Bob\"]", "", "1.d4 d5 *"].joined(separator: newline)
+            let expected = PGNParser.parse(text)
+            let actual = PGNParser.parse("\u{FEFF}" + text)
+            XCTAssertEqual(expected.count, 2)
+            XCTAssertEqual(actual.count, expected.count)
+            for (game, reference) in zip(actual, expected) {
+                XCTAssertEqual(game.tags, reference.tags)
+                XCTAssertEqual(game.moves, reference.moves)
+                XCTAssertEqual(game.result, reference.result)
+                XCTAssertEqual(PGNExporter.tokenText(from: game), PGNExporter.tokenText(from: reference))
+                XCTAssertEqual(game.diagnostics, reference.diagnostics)
+                XCTAssertEqual(game.hasInconsistentMoveNumbers, reference.hasInconsistentMoveNumbers)
+                XCTAssertEqual(game.variationWrittenOffsets, reference.variationWrittenOffsets)
+            }
+            XCTAssertEqual(actual.first?.tags["Event"], "First")
+        }
+    }
+
     private func comments(_ game: PGNGame) -> [String] {
         game.moveTokens.compactMap { if case .comment(let text) = $0 { return text }; return nil }
     }
