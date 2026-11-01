@@ -11,6 +11,19 @@ breaking `0.10.0`.
 
 Published tags are never moved or re-cut.
 
+## [0.13.0] — 2026-10-31
+
+### Added
+
+- Lenient loading reports dropped moves, replay differences and export limits;
+  opt-in imputation reports inferred moves, and tokenization exposes diagnostics.
+
+### Changed
+
+- Default export includes setup and FEN tags for nonstandard starts.
+- Tag values are normalized to one line; tag names are skipped only if empty,
+  containing a line break, or containing a double quote.
+
 ## [0.12.0] — 2026-10-31
 
 Source-breaking only in a new public `PGNDiagnostic` case. Stored PGN stays
