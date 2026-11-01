@@ -25,6 +25,10 @@ public struct PGNLenientLoadReport {
     public let game: Game
     public let imputedMoves: [PGNImputedMove]
     public let droppedMoveTokens: [String]
+    /// Text that the tree cannot safely carry through a rewrite.
+    public let uncarriedText: [String]
+    /// Prose at variation heads attached to their branch point.
+    public let headCommentsMovedToBranchPoint: Int
     public let hasUnterminatedBraceComment: Bool
     /// Whether the loaded main line differs from a replay of depth-zero tokens.
     public let mainLineDiffersFromSnapshot: Bool
@@ -36,19 +40,21 @@ public struct PGNLenientLoadReport {
     /// Placement cannot safely be inferred, contradicts written numbers, or was not checked.
     public let hasUncertainVariationPlacement: Bool
 
-    /// Whether moves and the start position can safely replace stored text.
-    /// This does not cover comments or NAGs the exporter cannot carry.
+    /// Whether rewriting loses no text that lacks a tree home.
+    /// An annotation pass may still replace authored best moves, evals, or glyphs.
     /// Tags with names on one line and no double quote are preserved by the exporter.
     /// For a stored movetext row, use `tokenizeWithVariationDiagnostics`, not `parse(text).first`:
     /// parsing may split at a bracket-only line or skip an oversized record.
     public var canReplaceStoredText: Bool {
-        droppedMoveTokens.isEmpty && !hasUnterminatedBraceComment && !mainLineDiffersFromSnapshot
+        uncarriedText.isEmpty && droppedMoveTokens.isEmpty && !hasUnterminatedBraceComment && !mainLineDiffersFromSnapshot
             && !exceedsExportVariationDepth && !hasUnrecognizedSetupTag && !hasInconsistentMoveNumbers && !hasUncertainVariationPlacement && imputedMoves.isEmpty
     }
 }
 
 private final class PGNLoadAccounting {
     var dropped: [String] = []
+    var uncarried: [String] = []
+    var headComments = 0
     var order: PGNVariationOrder = .standard
     var uncertain = false
 }
@@ -89,6 +95,7 @@ extension PGNParser {
         guard let game = try? materialize(pgnGame, maximumTreeNodes: maximumMoveTreeNodes,
                                           rejectsUnparseableMainLine: false, accounting: accounting) else { return nil }
         return PGNLenientLoadReport(game: game, imputedMoves: [], droppedMoveTokens: accounting.dropped,
+            uncarriedText: accounting.uncarried, headCommentsMovedToBranchPoint: accounting.headComments,
             hasUnterminatedBraceComment: pgnGame.diagnostics.contains(.unterminatedBraceComment),
             mainLineDiffersFromSnapshot: mainLineDiffers(pgnGame, game: game),
             exceedsExportVariationDepth: exceedsExportDepth(game),
@@ -175,6 +182,7 @@ extension PGNParser {
         }
         return PGNLenientLoadReport(game: report.game, imputedMoves: imputed,
             droppedMoveTokens: report.droppedMoveTokens,
+            uncarriedText: report.uncarriedText, headCommentsMovedToBranchPoint: report.headCommentsMovedToBranchPoint,
             hasUnterminatedBraceComment: report.hasUnterminatedBraceComment,
             mainLineDiffersFromSnapshot: report.mainLineDiffersFromSnapshot,
             exceedsExportVariationDepth: report.exceedsExportVariationDepth,
@@ -336,6 +344,7 @@ extension PGNParser {
         // Parallel to `nodeStack`: the frame's next move continues a line whose
         // alternatives were read first.
         var continuationIsPending = [false]
+        var frameHasMove = [false]
         var materializedNodeCount = 0
         // Open parentheses in the variation being abandoned, its own included.
         // Its own close still reaches the switch, to pop its frame.
@@ -350,6 +359,12 @@ extension PGNParser {
                 continue
             }
             if abandonedDepth > 0 {
+                switch token {
+                case .comment(let text) where !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty: accounting?.uncarried.append(text)
+                case .nag(let n): accounting?.uncarried.append("$\(n)")
+                case .move(let san) where isReportNoise(san): accounting?.uncarried.append(san)
+                default: break
+                }
                 if case .move(let san) = token, !isReportNoise(san) {
                     accounting?.dropped.append(san)
                 }
@@ -360,7 +375,11 @@ extension PGNParser {
             switch token {
             case .move(let san):
                 let (cleanedSan, annotation) = MoveAnnotation.extract(from: san)
-                if isReportNoise(san) { continue }
+                if isReportNoise(san) {
+                    let glyphWords: Set<String> = ["=", "+=", "=+", "+/=", "=/+", "+/-", "-/+", "+-", "-+", "∞", "±", "∓", "⩲", "⩱", "□", "N", "D"]
+                    if glyphWords.contains(san) || (cleanedSan.isEmpty && annotation != nil) || (nodeStack.count > 1 && !san.isEmpty && san.allSatisfy { $0.isASCII && $0.isNumber }) { accounting?.uncarried.append(san) }
+                    continue
+                }
                 let currentPos: Position
                 if let last = nodeStack.last, let node = last {
                     currentPos = node.positionAfter
@@ -398,7 +417,9 @@ extension PGNParser {
                     }
                 }
 
+                frameHasMove[frameHasMove.count - 1] = true
                 if let existing = siblings.first(where: { $0.move == move }) {
+                    if let annotation, let old = existing.annotation, old != annotation { accounting?.uncarried.append(san) }
                     if let annotation { existing.annotation = annotation }
                     nodeStack[nodeStack.count - 1] = existing
                 } else {
@@ -419,6 +440,11 @@ extension PGNParser {
                 }
 
             case .nag(let number):
+                let node = nodeStack.last ?? nil
+                let mapped = MoveAnnotation.from(nag: number)
+                if mapped == nil || node == nil || !frameHasMove[frameHasMove.count - 1] || (node?.annotation != nil && node?.annotation != mapped) {
+                    accounting?.uncarried.append("$\(number)")
+                }
                 if let annotation = MoveAnnotation.from(nag: number),
                    let last = nodeStack.last, let currentNode = last {
                     currentNode.annotation = annotation
@@ -438,14 +464,29 @@ extension PGNParser {
                     nodeStack.append(branchPoint)
                 }
                 continuationIsPending.append(false)
+                frameHasMove.append(false)
 
             case .variationEnd:
                 if nodeStack.count > 1 {
                     nodeStack.removeLast()
                     continuationIsPending.removeLast()
+                    frameHasMove.removeLast()
                 }
 
             case .comment(let text):
+                let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                if let accounting, !trimmedText.isEmpty {
+                    if let node = nodeStack.last ?? nil {
+                        let parsed = parseEngineComment(trimmedText)
+                        let atHead = nodeStack.count > 1 && !frameHasMove[frameHasMove.count - 1]
+                        if atHead {
+                            if parsed.eval != nil || parsed.bestMove != nil || parsed.clockSeconds != nil {
+                                accounting.uncarried.append(text)
+                            } else { accounting.headComments += 1 }
+                        }
+                        if commentLosesText(trimmedText, node: node) { accounting.uncarried.append(text) }
+                    } else { accounting.uncarried.append(text) }
+                }
                 if let last = nodeStack.last, let currentNode = last {
                     let trimmed = text.trimmingCharacters(in: .whitespaces)
                     if !trimmed.isEmpty {
@@ -475,6 +516,40 @@ extension PGNParser {
         if let lastNode = mainLine.last {
             game.navigateToNode(lastNode)
         }
+    }
+
+    // Mirrors the comment reader only for loss accounting; it never changes what it reads.
+    private static func commentLosesText(_ text: String, node: MoveNode) -> Bool {
+        func matches(_ value: String, _ pattern: String) -> Bool {
+            value.range(of: pattern, options: .regularExpression) != nil
+        }
+        func count(_ marker: String) -> Int { text.components(separatedBy: marker).count - 1 }
+        let parsed = parseEngineComment(text)
+        if count("[%eval") > 1 || count("[%clk") > 1 { return true }
+        if matches(text, #"\[%clk\s+\d+:\d{2}:\d{2}(?:\.\d+)?\]"#) && parsed.clockSeconds == nil { return true }
+        if let best = parsed.bestMove, !matches(best, #"^(?:[KQRBN]?[a-h]?[1-8]?x?[a-h][1-8](?:=?[QRBNqrbn])?|O-O(?:-O)?|0-0(?:-0)?|[a-h][1-8][a-h][1-8][qrbn]?)[+#]?[!?]*$"#) { return true }
+        if let eval = parsed.eval, let old = node.engineEval, eval != old { return true }
+        if let clock = parsed.clockSeconds, let old = node.clockSeconds, clock != old { return true }
+        if let best = parsed.bestMove, let old = node.engineBestMoveUCI,
+           (UCIParser.sanToUCI(best, in: node.positionBefore) ?? best) != old { return true }
+        // Strip tags first: a clock and a bare mate can share a semicolon part.
+        let withoutTags = text.replacingOccurrences(of: #"\[%(?:eval|clk)[^\]]*\]"#, with: "", options: .regularExpression)
+        var evals: [String] = []
+        var bests: [String] = []
+        for part in withoutTags.components(separatedBy: ";") {
+            let value = parseEngineComment(part.trimmingCharacters(in: .whitespacesAndNewlines))
+            if let eval = value.eval {
+                if !matches(eval, #"^(?:[+-]?\d+\.\d{1,2}|[+-]?M\d*)$"#) { return true }
+                evals.append(eval)
+            }
+            if let best = value.bestMove {
+                if !matches(best, #"^(?:[KQRBN]?[a-h]?[1-8]?x?[a-h][1-8](?:=?[QRBNqrbn])?|O-O(?:-O)?|0-0(?:-0)?|[a-h][1-8][a-h][1-8][qrbn]?)[+#]?[!?]*$"#) { return true }
+                bests.append(best)
+            }
+        }
+        if Set(evals).count > 1 || Set(bests).count > 1 { return true }
+        if count("[%eval") > 0, let tagged = parsed.eval, evals.contains(where: { $0 != tagged }) { return true }
+        return false
     }
 
     private static func variationDecision(tokens: [PGNToken], offsets: [Int: Int], start: Position)

@@ -66,7 +66,7 @@ extension PGNNestedVariationTests {
             ("e4 ( Nf3 Nf6 Nc3 Nc6 e3 ( Nd4 ) e6 d3 ) e5", "1. e4 ( 1. Nf3 Nf6 2. Nc3 Nc6 3. e3 ( 3. Nd4 ) 3... e6 4. d3 ) e5", false, .standard),
             ("1. e4 ( 1. Nf3 Nf6 2. Nc3 Nc6 3. e3 ( 3... Nd4 ) ) e5", "1. e4 ( 1. Nf3 Nf6 2. Nc3 Nc6 3. e3 ( 3. Nd4 ) ) e5", false, .standard),
             ("1. e4 ( 1. Nf3 Nf6 2. Nc3 Nc6 3. e3 ( 3... Nd4 ) 3... e6 ( 3... a6 ) 4. d3 ) e5", "1. e4 ( 1. Nf3 Nf6 2. Nc3 Nc6 3. e3 ( 3. Nd4 ) 3... e6 ( 3... a6 ) 4. d3 ) e5", false, .standard),
-            ("1. e4 ( 1. Nf3 ( {see notes} ) Nf6 ) e5", "1. e4 ( 1. Nf3 ( {see notes} ) Nf6 ) e5", true, .standard),
+            ("1. e4 ( 1. Nf3 ( {see notes} ) Nf6 ) e5", "1. e4 ( 1. Nf3 ( {see notes} ) Nf6 ) e5", false, .standard),
             ("1. e4 ( 1. Nf3 ( ) Nf6 ) e5", "1. e4 ( 1. Nf3 ( ) Nf6 ) e5", true, .standard),
         ]
         for (text, expected, pass, order) in cases {

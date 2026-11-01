@@ -23,12 +23,12 @@ final class PGNLenientReportTests: XCTestCase {
             XCTAssertEqual(parsed.hasInconsistentMoveNumbers, !expected, text)
             let report = try XCTUnwrap(PGNParser.loadGameWithReport(from: parsed))
             XCTAssertEqual(report.hasInconsistentMoveNumbers, !expected, text)
-            XCTAssertEqual(report.canReplaceStoredText, expected, text)
+            XCTAssertEqual(report.canReplaceStoredText, expected && !text.contains("N Nc6"), text)
             var manual = PGNGame()
             manual.moveTokens = scanned.tokens
             manual.diagnostics = scanned.diagnostics
             manual.hasInconsistentMoveNumbers = scanned.hasInconsistentMoveNumbers
-            XCTAssertEqual(try XCTUnwrap(PGNParser.loadGameWithReport(from: manual)).canReplaceStoredText, expected, text)
+            XCTAssertEqual(try XCTUnwrap(PGNParser.loadGameWithReport(from: manual)).canReplaceStoredText, expected && !text.contains("N Nc6"), text)
         }
         let fen = "[FEN \"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 20\"]\n\n20... Nf6 21. Nf3"
         let game = try XCTUnwrap(PGNParser.parse(fen).first)
