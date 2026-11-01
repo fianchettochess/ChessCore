@@ -977,6 +977,14 @@ public enum PGNParser {
 
 public enum PGNExporter {
 
+    /// Keep tag strings on one header line, then escape PGN string delimiters.
+    static func pgnEscapedTagValue(_ value: String) -> String {
+        value.split(omittingEmptySubsequences: false, whereSeparator: { $0.isNewline })
+            .joined(separator: " ")
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+    }
+
     /// Brace comments cannot escape a closing brace. Such prose is safe in a
     /// semicolon comment on its own line; keep its terminating newline so the
     /// next move or variation delimiter cannot become part of the comment.

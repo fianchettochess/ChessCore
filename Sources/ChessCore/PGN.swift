@@ -495,16 +495,6 @@ extension PGNExporter {
         result += commentText(body) + " "
     }
 
-    /// PGN string-token escaping (§8.1 of the PGN spec): backslash must be
-    /// escaped before quote so a single backslash in the input doesn't
-    /// accidentally escape the following character. Without this, a quote or
-    /// backslash in a tag value emitted out-of-spec PGN whose header string
-    /// terminates early in conforming readers (SCID, python-chess, Lichess).
-    private static func pgnEscapedTagValue(_ value: String) -> String {
-        value.replacingOccurrences(of: "\\", with: "\\\\")
-             .replacingOccurrences(of: "\"", with: "\\\"")
-    }
-
     /// PGN `Date` formatter, built ONCE. `DateFormatter()` sets up locale +
     /// calendar + ICU — expensive to instantiate (worse on swift-corelibs /
     /// SkipFoundation), and it was rebuilt on every export. Immutable after
