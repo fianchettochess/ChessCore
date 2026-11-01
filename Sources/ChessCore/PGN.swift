@@ -528,6 +528,10 @@ extension PGNExporter {
         tags["White"] = "Player 1"
         tags["Black"] = "Player 2"
         tags["Result"] = resultString(for: game)
+        if game.startPosition != .initial() {
+            tags["SetUp"] = "1"
+            tags["FEN"] = game.startPosition.fen
+        }
         return tags
     }
 
