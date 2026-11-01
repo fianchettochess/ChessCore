@@ -204,3 +204,23 @@ let white   = GameTagCodec.firstValue(forKey: "White", in: encoded)
 `decode(_:)` returns an unordered `[String: String]` for analytics that don't
 care about order; `decodeOrdered(_:)` preserves the original key order for
 faithful re-export.
+
+### Nested variation placement and stored text
+
+When constructing a `PGNGame` from `tokenizeWithDiagnostics`, also copy
+`variationWrittenOffsets` from the result. Move numbers can distinguish standard
+nested variation placement from the order written by ChessCore 0.11.4. The
+lenient report exposes the selected `variationOrder` for other token walkers and
+sets `hasUncertainVariationPlacement` when replacement is unsafe. Callers should
+retain the original text when `canReplaceStoredText` is false. Empty variations
+do not by themselves cause uncertainty. Nested texts exceeding the replay budget
+are read in standard order and refused for replacement.
+
+The decision replays the entire text. An unrelated unreadable token can prevent
+an old-order replay and change the displayed placement of other variations; such
+texts are refused for replacement. An interactive overwrite that saves the
+visible tree must account for this separately. Numberless text legal in both
+orders is displayed in standard order and refused; the original order cannot be
+recovered from those bytes. `tokenText` removes move numbers, including when
+importing numbered text, so an import can discard the evidence used to resolve
+placement and create a row that later displays differently or is refused.

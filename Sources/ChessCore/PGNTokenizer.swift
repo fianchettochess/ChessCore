@@ -28,6 +28,8 @@ public struct PGNGame: Identifiable, Sendable {
     public var diagnostics: [PGNDiagnostic] = []
     /// Written main-line move numbers disagree with the intervening moves.
     public var hasInconsistentMoveNumbers: Bool = false
+    /// Written head position minus the enclosing line’s preceding move position.
+    public var variationWrittenOffsets: [Int: Int] = [:]
 
     public init() {}
 
@@ -192,6 +194,7 @@ public enum PGNParser {
                         current.moveTokens = tokens
                         current.result = scanned.result
                         current.hasInconsistentMoveNumbers = scanned.hasInconsistentMoveNumbers
+                        current.variationWrittenOffsets = scanned.variationWrittenOffsets
                         current.diagnostics.append(contentsOf: scanned.diagnostics)
                         games.append(current)
                     }
@@ -249,6 +252,7 @@ public enum PGNParser {
             current.moveTokens = tokens
             current.result = scanned.result
             current.hasInconsistentMoveNumbers = scanned.hasInconsistentMoveNumbers
+            current.variationWrittenOffsets = scanned.variationWrittenOffsets
             current.diagnostics.append(contentsOf: scanned.diagnostics)
             games.append(current)
         }
@@ -274,8 +278,6 @@ public enum PGNParser {
     }
 
     /// Tokenize move text and return any diagnostics discovered while scanning it.
-    /// Carry all three values into a manually constructed `PGNGame` so loading can
-    /// report text lost to an unterminated comment.
     public static func tokenizeWithDiagnostics(
         _ moveText: String
     ) -> (tokens: [PGNToken], diagnostics: [PGNDiagnostic], hasInconsistentMoveNumbers: Bool) {
@@ -283,11 +285,21 @@ public enum PGNParser {
         return (scanned.tokens, scanned.diagnostics, scanned.hasInconsistentMoveNumbers)
     }
 
+    /// Tokenize with written variation offsets for loss-aware game loading.
+    /// Carry the diagnostics, move-number consistency and variation offsets into a
+    /// manually constructed `PGNGame` so loading can report loss or uncertainty.
+    public static func tokenizeWithVariationDiagnostics(
+        _ moveText: String
+    ) -> (tokens: [PGNToken], diagnostics: [PGNDiagnostic], hasInconsistentMoveNumbers: Bool, variationWrittenOffsets: [Int: Int]) {
+        let scanned = scan(moveText)
+        return (scanned.tokens, scanned.diagnostics, scanned.hasInconsistentMoveNumbers, scanned.variationWrittenOffsets)
+    }
+
     // Result markers must be read by the same lexer as moves: prose in either
     // comment syntax, or a result inside a variation, cannot end the mainline.
     private static func scan(
         _ moveText: String
-    ) -> (tokens: [PGNToken], result: String?, diagnostics: [PGNDiagnostic], hasInconsistentMoveNumbers: Bool) {
+    ) -> (tokens: [PGNToken], result: String?, diagnostics: [PGNDiagnostic], hasInconsistentMoveNumbers: Bool, variationWrittenOffsets: [Int: Int]) {
         var tokens: [PGNToken] = []
         var result: String?
         var diagnostics: [PGNDiagnostic] = []
@@ -295,17 +307,47 @@ public enum PGNParser {
         var previousWrittenPosition: Int?
         var interveningMoves = 0
         var hasInconsistentMoveNumbers = false
+        struct WrittenLine {
+            var open: Int?
+            var parentPosition: Int?
+            var firstPosition: Int?
+            var moveCount = 0
+            var pendingPosition: Int?
+            var inconsistent = false
+        }
+        let trackWrittenLines = moveText.contains("(")
+        var writtenLines = [WrittenLine()]
+        var offsets: [Int: Int] = [:]
+        func recordOffset(_ line: WrittenLine) {
+            if !line.inconsistent, let open = line.open, let first = line.firstPosition,
+               let parent = line.parentPosition, line.moveCount > 0 {
+                let (offset, overflow) = first.subtractingReportingOverflow(parent)
+                if overflow { hasInconsistentMoveNumbers = true } else { offsets[open] = offset }
+            }
+        }
         var i = moveText.startIndex
 
         while i < moveText.endIndex {
             let ch = moveText[i]
 
             if ch == "(" {
+                if writtenLines.count <= maximumVariationDepth {
+                    let parent = writtenLines[writtenLines.count - 1]
+                    var lastPosition: Int?
+                    if parent.moveCount > 0, let first = parent.firstPosition {
+                        let (last, overflow) = first.addingReportingOverflow(parent.moveCount - 1)
+                        if overflow { hasInconsistentMoveNumbers = true } else { lastPosition = last }
+                    }
+                    writtenLines.append(WrittenLine(open: tokens.count, parentPosition: lastPosition))
+                }
                 tokens.append(.variationStart)
                 variationDepth += 1
                 i = moveText.index(after: i)
             } else if ch == ")" {
                 tokens.append(.variationEnd)
+                if variationDepth <= maximumVariationDepth && writtenLines.count > 1 {
+                    recordOffset(writtenLines.removeLast())
+                }
                 variationDepth = max(0, variationDepth - 1)
                 i = moveText.index(after: i)
             } else if ch == "{" {
@@ -334,7 +376,8 @@ public enum PGNParser {
                     i = moveText.index(after: i)
                 }
                 let word = String(moveText[start..<i])
-                if variationDepth == 0, var position = writtenMovePosition(word) {
+                let writtenPosition = writtenMovePosition(word)
+                if variationDepth == 0, var position = writtenPosition {
                     if position == Int.max { hasInconsistentMoveNumbers = true }
                     // "1. ... e5" and "1 ... e5" write Black's marker as its own word.
                     else if word.allSatisfy({ $0.isNumber || $0 == "." }) {
@@ -348,6 +391,13 @@ public enum PGNParser {
                     previousWrittenPosition = position
                     interveningMoves = 0
                 }
+                if trackWrittenLines, variationDepth <= maximumVariationDepth, var position = writtenPosition, position != Int.max {
+                    if word.allSatisfy({ $0.isNumber || $0 == "." }) {
+                        let next = moveText[i...].drop(while: \.isWhitespace)
+                        if next.hasPrefix("...") || next.hasPrefix("…") { position += 1 }
+                    }
+                    writtenLines[writtenLines.count - 1].pendingPosition = position
+                }
                 if word.hasPrefix("$"), let nagNumber = Int(word.dropFirst()) {
                     tokens.append(.nag(nagNumber))
                 } else if isResult(word) {
@@ -356,13 +406,25 @@ public enum PGNParser {
                     let stripped = stripMoveNumberPrefix(word)
                     if !stripped.isEmpty {
                         tokens.append(.move(stripped))
+                        if trackWrittenLines && variationDepth <= maximumVariationDepth && !isReportNoise(stripped) {
+                            let index = writtenLines.count - 1
+                            if let position = writtenLines[index].pendingPosition {
+                                let first = position - writtenLines[index].moveCount
+                                if let previous = writtenLines[index].firstPosition, previous != first {
+                                    writtenLines[index].inconsistent = true
+                                } else { writtenLines[index].firstPosition = first }
+                            }
+                            writtenLines[index].pendingPosition = nil
+                            writtenLines[index].moveCount += 1
+                        }
                         if variationDepth == 0 && !isReportNoise(stripped) { interveningMoves += 1 }
                     }
                 }
             }
         }
 
-        return (tokens, result, diagnostics, hasInconsistentMoveNumbers)
+        for line in writtenLines.dropFirst() { recordOffset(line) }
+        return (tokens, result, diagnostics, hasInconsistentMoveNumbers, offsets)
     }
 
     public static func flatMoves(from tokens: [PGNToken]) -> [String] {

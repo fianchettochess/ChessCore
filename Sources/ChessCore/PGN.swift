@@ -13,8 +13,14 @@ public struct PGNImputedMove {
     public let plyIndex: Int
 }
 
+/// The order used to interpret nested variations in a complete movetext.
+public enum PGNVariationOrder: Sendable {
+    case standard
+    case alternativesBeforeContinuation
+}
+
 /// Information a storage caller needs before replacing the original movetext.
-/// Callers building `PGNGame` by hand must carry over move-text diagnostics.
+/// Callers building `PGNGame` by hand must carry diagnostics and written offsets.
 public struct PGNLenientLoadReport {
     public let game: Game
     public let imputedMoves: [PGNImputedMove]
@@ -25,20 +31,26 @@ public struct PGNLenientLoadReport {
     public let exceedsExportVariationDepth: Bool
     public let hasUnrecognizedSetupTag: Bool
     public let hasInconsistentMoveNumbers: Bool
+    /// Order used by the tree builder. Depth-one variations always use standard placement.
+    public let variationOrder: PGNVariationOrder
+    /// Placement cannot safely be inferred, contradicts written numbers, or was not checked.
+    public let hasUncertainVariationPlacement: Bool
 
     /// Whether moves and the start position can safely replace stored text.
     /// This does not cover comments or NAGs the exporter cannot carry.
     /// Tags with names on one line and no double quote are preserved by the exporter.
-    /// For a stored movetext row, use `tokenizeWithDiagnostics`, not `parse(text).first`:
+    /// For a stored movetext row, use `tokenizeWithVariationDiagnostics`, not `parse(text).first`:
     /// parsing may split at a bracket-only line or skip an oversized record.
     public var canReplaceStoredText: Bool {
         droppedMoveTokens.isEmpty && !hasUnterminatedBraceComment && !mainLineDiffersFromSnapshot
-            && !exceedsExportVariationDepth && !hasUnrecognizedSetupTag && !hasInconsistentMoveNumbers && imputedMoves.isEmpty
+            && !exceedsExportVariationDepth && !hasUnrecognizedSetupTag && !hasInconsistentMoveNumbers && !hasUncertainVariationPlacement && imputedMoves.isEmpty
     }
 }
 
 private final class PGNLoadAccounting {
     var dropped: [String] = []
+    var order: PGNVariationOrder = .standard
+    var uncertain = false
 }
 
 extension PGNParser {
@@ -47,6 +59,7 @@ extension PGNParser {
     /// including variations. This is deliberately far above practical game
     /// trees while bounding adversarial, compact repetition input.
     public static let maximumMoveTreeNodes = 65_536
+    static let maximumVariationDepth = 1_024
 
     public static func loadGame(from pgn: String) -> Game? {
         let pgnGames = parse(pgn)
@@ -80,7 +93,8 @@ extension PGNParser {
             mainLineDiffersFromSnapshot: mainLineDiffers(pgnGame, game: game),
             exceedsExportVariationDepth: exceedsExportDepth(game),
             hasUnrecognizedSetupTag: pgnGame.tags.orderedKeys.contains { $0 != "FEN" && $0.uppercased() == "FEN" },
-            hasInconsistentMoveNumbers: pgnGame.hasInconsistentMoveNumbers)
+            hasInconsistentMoveNumbers: pgnGame.hasInconsistentMoveNumbers,
+            variationOrder: accounting.order, hasUncertainVariationPlacement: accounting.uncertain)
     }
 
     /// Opt in to conservative main-line repair. An unreadable token is replaced
@@ -165,7 +179,8 @@ extension PGNParser {
             mainLineDiffersFromSnapshot: report.mainLineDiffersFromSnapshot,
             exceedsExportVariationDepth: report.exceedsExportVariationDepth,
             hasUnrecognizedSetupTag: report.hasUnrecognizedSetupTag,
-            hasInconsistentMoveNumbers: report.hasInconsistentMoveNumbers)
+            hasInconsistentMoveNumbers: report.hasInconsistentMoveNumbers,
+            variationOrder: report.variationOrder, hasUncertainVariationPlacement: report.hasUncertainVariationPlacement)
     }
 
     static func hasImputationShape(_ token: String) -> Bool {
@@ -290,8 +305,14 @@ extension PGNParser {
                 materializedNodeCount += 1
             }
         } else {
+            let decision = variationDecision(tokens: pgnGame.moveTokens, offsets: pgnGame.variationWrittenOffsets,
+                                             start: startPosition)
+            accounting?.order = decision.order
+            accounting?.uncertain = decision.uncertain
             try buildTree(
                 game: game,
+                order: decision.order,
+                nestedMoves: decision.nestedMoves,
                 tokens: pgnGame.moveTokens,
                 maximumNodes: maximumTreeNodes,
                 rejectsUnparseableMainLine: rejectsUnparseableMainLine,
@@ -304,6 +325,8 @@ extension PGNParser {
 
     private static func buildTree(
         game: Game,
+        order: PGNVariationOrder,
+        nestedMoves: Set<Int>,
         tokens: [PGNToken],
         maximumNodes: Int,
         rejectsUnparseableMainLine: Bool,
@@ -311,15 +334,21 @@ extension PGNParser {
     ) throws {
         var nodeStack: [MoveNode?] = [nil]
         // Parallel to `nodeStack`: the frame's next move continues a line whose
-        // alternatives were read first (see `opensAfterLastMove`).
+        // alternatives were read first.
         var continuationIsPending = [false]
-        let nestedLines = nestedVariationMoves(in: tokens)
         var materializedNodeCount = 0
         // Open parentheses in the variation being abandoned, its own included.
         // Its own close still reaches the switch, to pop its frame.
         var abandonedDepth = 0
+        var skippedDepth = 0
 
         for (tokenIndex, token) in tokens.enumerated() {
+            if skippedDepth > 0 {
+                if case .move(let san) = token, !isReportNoise(san) { accounting?.dropped.append(san) }
+                if case .variationStart = token { skippedDepth += 1 }
+                if case .variationEnd = token { skippedDepth -= 1 }
+                continue
+            }
             if abandonedDepth > 0 {
                 if case .move(let san) = token, !isReportNoise(san) {
                     accounting?.dropped.append(san)
@@ -331,7 +360,7 @@ extension PGNParser {
             switch token {
             case .move(let san):
                 let (cleanedSan, annotation) = MoveAnnotation.extract(from: san)
-                if isMoveTextNoise(cleanedSan) { continue }
+                if isReportNoise(san) { continue }
                 let currentPos: Position
                 if let last = nodeStack.last, let node = last {
                     currentPos = node.positionAfter
@@ -396,13 +425,13 @@ extension PGNParser {
                 }
 
             case .variationStart:
+                if nodeStack.count > maximumVariationDepth {
+                    skippedDepth = 1
+                    continue
+                }
                 let currentNode = nodeStack.last ?? nil
                 let branchPoint = currentNode?.parent
-                // A line over the budget fails either way, and replaying it
-                // would spend work the budget exists to bound.
-                if let currentNode, let line = nestedLines[tokenIndex],
-                   line.count <= maximumNodes - materializedNodeCount,
-                   opensAfterLastMove(line, lastMove: currentNode, startPosition: game.startPosition) {
+                if nestedMoves.contains(tokenIndex) && order == .alternativesBeforeContinuation {
                     continuationIsPending[continuationIsPending.count - 1] = true
                     nodeStack.append(currentNode)
                 } else {
@@ -448,56 +477,86 @@ extension PGNParser {
         }
     }
 
-    /// The moves each nested variation plays at its own level, keyed by the
-    /// index of its opening token. One pass, so hostile nesting stays linear.
-    private static func nestedVariationMoves(in tokens: [PGNToken]) -> [Int: [String]] {
-        var moves: [Int: [String]] = [:]
-        var openVariations: [Int] = []
+    private static func variationDecision(tokens: [PGNToken], offsets: [Int: Int], start: Position)
+        -> (order: PGNVariationOrder, uncertain: Bool, nestedMoves: Set<Int>) {
+        // Only lines with moves at their own level can change placement.
+        var stack: [(index: Int, hasMove: Bool)] = []
+        var nested: [Int] = []
+        var moveCount = 0
         for (index, token) in tokens.enumerated() {
             switch token {
             case .variationStart:
-                openVariations.append(index)
-                if openVariations.count >= 2 { moves[index] = [] }
+                if stack.count >= maximumVariationDepth { return (.standard, true, []) }
+                stack.append((index, false))
             case .variationEnd:
-                _ = openVariations.popLast()
+                if let line = stack.popLast(), line.hasMove, stack.count >= 1 { nested.append(line.index) }
             case .move(let san):
-                if openVariations.count >= 2, let open = openVariations.last {
-                    moves[open, default: []].append(san)
+                if !isReportNoise(san) {
+                    moveCount += 1
+                    if !stack.isEmpty { stack[stack.count - 1].hasMove = true }
                 }
-            case .comment, .nag:
-                break
+            default: break
             }
         }
-        return moves
-    }
-
-    /// Whether a nested variation was stored by an exporter that wrote a line's
-    /// alternatives ahead of the move they replace, so it starts from the
-    /// position after `lastMove` rather than from `lastMove`'s parent. Library
-    /// rows keep only this text, and those variations are recoverable from it.
-    ///
-    /// Move numbers do not survive tokenizing, and SAN carries no colour, so the
-    /// whole line has to replay. Standard PGN wins whenever it replays, which
-    /// leaves a stored line that is legal from both positions in standard place.
-    private static func opensAfterLastMove(
-        _ line: [String],
-        lastMove: MoveNode,
-        startPosition: Position
-    ) -> Bool {
-        let standardStart = lastMove.parent?.positionAfter ?? startPosition
-        return !replays(line, from: standardStart) && replays(line, from: lastMove.positionAfter)
-    }
-
-    private static func replays(_ line: [String], from start: Position) -> Bool {
-        var position = start
-        for san in line {
-            let (cleanedSan, _) = MoveAnnotation.extract(from: san)
-            if isMoveTextNoise(cleanedSan) { continue }
-            guard let move = parseMove(cleanedSan, in: position) else { return false }
-            MoveGenerator.applyMoveUnchecked(&position, move)
+        // Also account for unclosed lines without making malformed input expensive.
+        for (depth, line) in stack.enumerated() where depth >= 1 && line.hasMove { nested.append(line.index) }
+        guard !nested.isEmpty else { return (.standard, false, []) }
+        guard moveCount <= maximumMoveTreeNodes else { return (.standard, true, Set(nested)) }
+        let active = Set(nested)
+        struct Frame {
+            var position: Position
+            var before: Position
+            var pending = false
         }
-        return !line.isEmpty
+        func replay(old: Bool) -> Bool {
+            var frames = [Frame(position: start, before: start)]
+            for (index, token) in tokens.enumerated() {
+                switch token {
+                case .move(let san):
+                    let cleaned = MoveAnnotation.extract(from: san).cleaned
+                    if isReportNoise(san) { continue }
+                    let i = frames.count - 1
+                    guard let move = parseMove(cleaned, in: frames[i].position) else { return false }
+                    frames[i].before = frames[i].position
+                    MoveGenerator.applyMoveUnchecked(&frames[i].position, move)
+                    frames[i].pending = false
+                case .variationStart:
+                    let i = frames.count - 1
+                    let useOld = old && frames.count >= 2 && active.contains(index)
+                    let position = useOld ? frames[i].position : frames[i].before
+                    if useOld { frames[i].pending = true }
+                    frames.append(Frame(position: position, before: position))
+                case .variationEnd:
+                    if frames.count > 1 {
+                        if frames.last!.pending { return false }
+                        frames.removeLast()
+                    }
+                default: break
+                }
+            }
+            return !frames.contains(where: { $0.pending })
+        }
+        let standard = replay(old: false)
+        let old = replay(old: true)
+        let written = nested.compactMap { offsets[$0] }
+        let allZero = !written.isEmpty && written.allSatisfy { $0 == 0 }
+        let allOne = !written.isEmpty && written.allSatisfy { $0 == 1 }
+        let order: PGNVariationOrder
+        var uncertain = false
+        if allZero { order = .standard }
+        else if allOne { order = old ? .alternativesBeforeContinuation : .standard }
+        else if old && !standard { order = .alternativesBeforeContinuation }
+        else {
+            order = .standard
+            uncertain = old && standard
+        }
+        if written.contains(where: { (order == .standard && $0 == 1) ||
+                                     (order == .alternativesBeforeContinuation && $0 == 0) }) {
+            uncertain = true
+        }
+        return (order, uncertain, active)
     }
+
 }
 
 // MARK: - PGN Exporter (Game-tree part)
