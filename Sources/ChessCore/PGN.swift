@@ -849,18 +849,26 @@ extension PGNExporter {
     /// configuration and used only for formatting, so sharing is safe.
     private static let pgnDateFormatter: DateFormatter = {
         let f = DateFormatter()
-        f.dateFormat = "yyyy.MM.dd"
+        configurePGNDateFormatter(f)
         return f
     }()
 
-    private static func defaultTags(for game: Game) -> PGNGame.OrderedTags {
+    // Use the device's local date, including timezone changes after startup.
+    static func configurePGNDateFormatter(_ formatter: DateFormatter) {
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = .autoupdatingCurrent
+        formatter.dateFormat = "yyyy.MM.dd"
+    }
+
+    static func defaultTags(for game: Game, date: Date = Date()) -> PGNGame.OrderedTags {
         var tags = PGNGame.OrderedTags()
         // Neutral placeholders for a general-purpose kernel; callers that want
         // real metadata pass their own tags to `export(game:tags:)`.
         tags["Event"] = "Casual Game"
         tags["Site"] = "?"
 
-        tags["Date"] = Self.pgnDateFormatter.string(from: Date())
+        tags["Date"] = Self.pgnDateFormatter.string(from: date)
 
         tags["Round"] = "-"
         tags["White"] = "Player 1"
