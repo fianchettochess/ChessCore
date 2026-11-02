@@ -212,7 +212,9 @@ When constructing a `PGNGame` from `tokenizeWithDiagnostics`, also copy
 nested variation placement from the order written by ChessCore 0.11.4. The
 lenient report exposes the selected `variationOrder` for other token walkers and
 sets `hasUncertainVariationPlacement` when replacement is unsafe. Callers should
-retain the original text when `canReplaceStoredText` is false. Empty variations
+retain the original text when `canReplaceStoredText` is false. A rewrite using
+`canReplaceStoredTextKeepingLeadingComments` must preserve `leadingComments`
+from the row being replaced, never from a tree. Empty variations
 do not by themselves cause uncertainty. Nested texts exceeding the replay budget
 are read in standard order and refused for replacement.
 

@@ -108,4 +108,33 @@ final class PGNUncarriedTextTests: XCTestCase {
             }
         }
     }
+
+    func testKeepingLeadingCommentsRejectsVariationHeadMisclassificationThatWouldLoseAuthoredText() throws {
+        let cases: [(String, Bool, Bool, [String])] = [
+            ("{a} 1. e4", false, true, ["a"]),
+            ("{a} {b} 1. e4", false, true, ["a", "b"]),
+            ("1. {a} e4", false, true, ["a"]),
+            ("{[%clk 0:10:00]} 1. e4", false, true, ["[%clk 0:10:00]"]),
+            ("{a} *", false, true, ["a"]),
+            ("{+0.3} 1. e4", false, false, []),
+            ("{; best e4} 1. e4", false, false, []),
+            ("$1 {a} 1. e4", false, false, []),
+            ("1. e4 ( {a} 1. d4 ) e5", false, false, []),
+            ("{a} 1. e4 ( {a} 1. d4 ) e5", false, false, ["a"]),
+            ("( ) {a} 1. e4", false, false, [])
+        ]
+        for (text, old, keep, leading) in cases {
+            let scan = PGNParser.tokenizeWithVariationDiagnostics(text)
+            var input = PGNGame()
+            input.moveTokens = scan.tokens
+            input.diagnostics = scan.diagnostics
+            input.variationWrittenOffsets = scan.variationWrittenOffsets
+            input.hasInconsistentMoveNumbers = scan.hasInconsistentMoveNumbers
+            let report = try XCTUnwrap(PGNParser.loadGameWithReport(from: input), text)
+            XCTAssertEqual(report.canReplaceStoredText, old, text)
+            XCTAssertEqual(report.canReplaceStoredTextKeepingLeadingComments, keep, text)
+            XCTAssertEqual(report.leadingComments, leading, text)
+        }
+    }
+
 }

@@ -30,6 +30,8 @@ public struct PGNLenientLoadReport {
     public let droppedMoveTokens: [String]
     /// Text that the tree cannot safely carry through a rewrite.
     public let uncarriedText: [String]
+    /// Subset of uncarriedText before the first non-comment token, in token order and raw token text.
+    public let leadingComments: [String]
     /// Prose at variation heads attached to their branch point.
     public let headCommentsMovedToBranchPoint: Int
     public let hasUnterminatedBraceComment: Bool
@@ -52,6 +54,12 @@ public struct PGNLenientLoadReport {
         uncarriedText.isEmpty && droppedMoveTokens.isEmpty && !hasUnterminatedBraceComment && !mainLineDiffersFromSnapshot
             && !exceedsExportVariationDepth && !hasUnrecognizedSetupTag && !hasInconsistentMoveNumbers && !hasUncertainVariationPlacement && imputedMoves.isEmpty
     }
+
+    /// Whether rewriting is safe if the caller preserves the leading comments from the stored row.
+    public var canReplaceStoredTextKeepingLeadingComments: Bool {
+        uncarriedText.count == leadingComments.count && droppedMoveTokens.isEmpty && !hasUnterminatedBraceComment && !mainLineDiffersFromSnapshot
+            && !exceedsExportVariationDepth && !hasUnrecognizedSetupTag && !hasInconsistentMoveNumbers && !hasUncertainVariationPlacement && imputedMoves.isEmpty
+    }
 }
 
 private final class PGNLoadAccounting {
@@ -62,6 +70,7 @@ private final class PGNLoadAccounting {
     }
     var dropped: [String] = []
     var uncarried: [String] = []
+    var leading: [String] = []
     var headComments = 0
     var order: PGNVariationOrder = .standard
     var uncertain = false
@@ -103,7 +112,7 @@ extension PGNParser {
         guard let game = try? materialize(pgnGame, maximumTreeNodes: maximumMoveTreeNodes,
                                           rejectsUnparseableMainLine: false, accounting: accounting) else { return nil }
         return PGNLenientLoadReport(game: game, firstAnnotationsByNodeID: accounting.firstAnnotationsByNodeID, imputedMoves: [], droppedMoveTokens: accounting.dropped,
-            uncarriedText: accounting.uncarried, headCommentsMovedToBranchPoint: accounting.headComments,
+            uncarriedText: accounting.uncarried, leadingComments: accounting.leading, headCommentsMovedToBranchPoint: accounting.headComments,
             hasUnterminatedBraceComment: pgnGame.diagnostics.contains(.unterminatedBraceComment),
             mainLineDiffersFromSnapshot: mainLineDiffers(pgnGame, game: game),
             exceedsExportVariationDepth: exceedsExportDepth(game),
@@ -190,7 +199,7 @@ extension PGNParser {
         }
         return PGNLenientLoadReport(game: report.game, firstAnnotationsByNodeID: report.firstAnnotationsByNodeID, imputedMoves: imputed,
             droppedMoveTokens: report.droppedMoveTokens,
-            uncarriedText: report.uncarriedText, headCommentsMovedToBranchPoint: report.headCommentsMovedToBranchPoint,
+            uncarriedText: report.uncarriedText, leadingComments: report.leadingComments, headCommentsMovedToBranchPoint: report.headCommentsMovedToBranchPoint,
             hasUnterminatedBraceComment: report.hasUnterminatedBraceComment,
             mainLineDiffersFromSnapshot: report.mainLineDiffersFromSnapshot,
             exceedsExportVariationDepth: report.exceedsExportVariationDepth,
@@ -359,8 +368,10 @@ extension PGNParser {
         // Its own close still reaches the switch, to pop its frame.
         var abandonedDepth = 0
         var skippedDepth = 0
+        var sawNonComment = false
 
         for (tokenIndex, token) in tokens.enumerated() {
+            if case .comment = token {} else { sawNonComment = true }
             if skippedDepth > 0 {
                 if case .move(let san) = token, !isReportNoise(san) { accounting?.dropped.append(san) }
                 if case .variationStart = token { skippedDepth += 1 }
@@ -497,7 +508,13 @@ extension PGNParser {
                             } else { accounting.headComments += 1 }
                         }
                         if commentLosesText(trimmedText, node: node) { accounting.uncarried.append(text) }
-                    } else { accounting.uncarried.append(text) }
+                    } else {
+                        accounting.uncarried.append(text)
+                        let parsed = parseEngineComment(trimmedText)
+                        if !sawNonComment && parsed.eval == nil && parsed.bestMove == nil {
+                            accounting.leading.append(text)
+                        }
+                    }
                 }
                 if let last = nodeStack.last, let currentNode = last {
                     let trimmed = text.trimmingCharacters(in: .whitespaces)
