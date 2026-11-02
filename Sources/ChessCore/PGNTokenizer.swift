@@ -43,16 +43,12 @@ public struct PGNGame: Identifiable, Sendable {
     /// (see `PGNExporter.terminationToken`), not a claim that it is unfinished.
     public var resultText: String {
         if let result, result != "*" { return result }
-        if let tagged = tags["Result"], Self.isDecidedInputResult(tagged) { return tagged }
+        if let tagged = tags["Result"], Self.decidedResults.contains(tagged) { return tagged }
         return result ?? tags["Result"] ?? "*"
     }
 
     /// The three decided PGN results.
     public static let decidedResults: Set<String> = ["1-0", "0-1", "1/2-1/2"]
-    fileprivate static let halfPointResult = "½-½"
-    fileprivate static func isDecidedInputResult(_ result: String) -> Bool {
-        decidedResults.contains(result) || result == halfPointResult
-    }
     public var opening: String { tags["Opening"] ?? tags["ECO"] ?? "" }
     public var moveCount: Int { (moves.count + 1) / 2 }
 
@@ -414,9 +410,7 @@ public enum PGNParser {
                 }
                 if word.hasPrefix("$"), let nagNumber = Int(word.dropFirst()) {
                     tokens.append(.nag(nagNumber))
-                // Older stored variations stopped at this unrecognized word.
-                // Keep their replay unchanged while accepting main-line draws.
-                } else if isResult(word) && (word != PGNGame.halfPointResult || variationDepth == 0) {
+                } else if isResult(word) {
                     if variationDepth == 0 { result = word }
                 } else {
                     let stripped = stripMoveNumberPrefix(word)
@@ -1030,6 +1024,9 @@ public enum PGNParser {
             }
             index = line.index(after: index)
         }
+        // A stray quote after a closed value can leave the final bracket
+        // quoted. Preserve the legacy single-line recovery in that case.
+        if start == line.startIndex, let tag = parseTag(line) { return [tag] }
         return tags
     }
 
@@ -1086,7 +1083,7 @@ public enum PGNParser {
     }
 
     private static func isResult(_ token: String) -> Bool {
-        PGNGame.isDecidedInputResult(token) || token == "*"
+        ["1-0", "0-1", "1/2-1/2", "*"].contains(token)
     }
 
     // Bare numbers and dotted prefixes are accepted by the existing lexer.
