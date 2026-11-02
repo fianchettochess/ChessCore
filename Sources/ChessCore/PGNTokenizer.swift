@@ -212,8 +212,12 @@ public enum PGNParser {
                     moveTextByteCount = 0
                     moveTextOverflow = false
                 }
-                for (key, value) in parseTags(trimmed) {
+                let pairs = parseTags(trimmed)
+                for (key, value) in pairs {
                     current.tags[key] = value
+                }
+                if pairs.isEmpty, current.tags["FEN"] == nil, let fen = unquotedFEN(trimmed) {
+                    current.tags["FEN"] = fen
                 }
             } else if trimmed.isEmpty && moveTextLines.isEmpty {
                 continue
@@ -288,6 +292,15 @@ public enum PGNParser {
               let gap = inner.firstIndex(where: \.isWhitespace) else { return false }
         return gap != inner.startIndex && inner[..<gap].allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "_") }
             && !inner[gap...].allSatisfy(\.isWhitespace)
+    }
+
+    /// Other unquoted tags remain unread to preserve existing content identities.
+    private static func unquotedFEN(_ line: String) -> String? {
+        let inner = line.dropFirst().dropLast()
+        guard inner.hasPrefix("FEN"), let separator = inner.dropFirst(3).first, separator.isWhitespace,
+              !inner.contains("\"") else { return nil }
+        let value = inner.dropFirst(3).trimmingCharacters(in: .whitespaces)
+        return Position(fen: value) == nil ? nil : value
     }
 
     /// The line holding the next brace from `start` if that brace closes a
