@@ -2,6 +2,40 @@ import XCTest
 @testable import ChessCore
 
 final class PGNRecordBoundaryTests: XCTestCase {
+    func testNoteAndRecordBoundariesPreventLosingGameMovesOnImport() throws {
+        let cases: [(String, [[String]], [String?])] = [
+            ("1. e4 e5\n[diagram]\n2. Nf3 Nc6", [["e4", "e5", "[diagram]", "Nf3", "Nc6"]], [nil]),
+            ("1. e4 e5\n[%csl Ga1]\n2. Nf3", [["e4", "e5", "[%csl", "Ga1]", "Nf3"]], [nil]),
+            ("1. e4 e5\n\n[diagram]\n\n2. Nf3", [["e4", "e5"], ["Nf3"]], [nil, nil]),
+            ("[Event \"A\"]\n1.e4 e5 1-0\n\n[BadTag]\n1-0\n\n[Event \"C\"]\n1.d4 1-0", [["e4", "e5"], [], ["d4"]], ["1-0", "1-0", "1-0"]),
+            ("1. e4 *\n[Event A]\n[White B]\n1. d4 *", [["e4"], ["d4"]], ["*", "*"]),
+            ("1. e4 e5 1-0\n[Game2]\n1. d4 d5 0-1", [["e4", "e5"], ["d4", "d5"]], ["1-0", "0-1"]),
+            ("1. e4 e5 *\n[1]\n1. d4 d5 *", [["e4", "e5"], ["d4", "d5"]], ["*", "*"]),
+            ("1. e4 e5\n[Game2]\n1. d4 d5", [["e4", "e5"], ["d4", "d5"]], [nil, nil]),
+            ("1. e4 e5\n[Game2]\n\n1. d4 d5", [["e4", "e5"], ["d4", "d5"]], [nil, nil]),
+            ("1. e4\n[diagram]\n1... e5 2. Nf3", [["e4", "[diagram]", "e5", "Nf3"]], [nil]),
+            ("1. e4 1-0\n[Game2]\nd4 d5", [["e4"], ["d4", "d5"]], ["1-0", nil]),
+            ("1. e4\n[Event A]\nd4 d5", [["e4"], ["d4", "d5"]], [nil, nil]),
+            ("1. e4\n[_2 value]\nd4 d5", [["e4"], ["d4", "d5"]], [nil, nil])
+        ]
+        for (text, moves, results) in cases {
+            let games = PGNParser.parse(text)
+            XCTAssertEqual(games.map(\.moves), moves, text)
+            XCTAssertEqual(games.map(\.result), results, text)
+        }
+        let parsed = try XCTUnwrap(PGNParser.parse(cases[0].0).first)
+        XCTAssertTrue(PGNExporter.tokenText(from: parsed).contains("[diagram]"))
+        let report = try XCTUnwrap(PGNParser.loadGameWithReport(from: parsed))
+        XCTAssertEqual(report.droppedMoveTokens, ["[diagram]"])
+        XCTAssertFalse(report.canReplaceStoredText)
+        XCTAssertEqual(PGNExporter.moveText(for: report.game.rootChildren).trimmingCharacters(in: .whitespacesAndNewlines), "1. e4 e5 2. Nf3 Nc6")
+    }
+
+    func testOversizedGameNoteCannotCreateTruncatedImport() {
+        let text = "1. d4 {" + String(repeating: "x", count: 40) + "}\n[diagram]\n2. c4 d5 *"
+        XCTAssertTrue(PGNParser.parse(text, maximumMoveTextBytes: 24).isEmpty)
+    }
+
     func testLeadingBOMDoesNotLoseFirstGameTagsOrChangeParsedGames() throws {
         for newline in ["\n", "\r\n"] {
             let text = ["[Event \"First\"]", "[White \"Alice\"]", "", "1.e4 {note} e5 1-0", "",

@@ -190,7 +190,10 @@ public enum PGNParser {
                 }
             }
 
-            if !inBraceComment && trimmed.hasPrefix("[") && trimmed.hasSuffix("]") {
+            if !inBraceComment && trimmed.hasPrefix("[") && trimmed.hasSuffix("]")
+                && ((moveTextLines.isEmpty && !moveTextOverflow) || previousLineWasBlank
+                    || isRecordHeaderLine(trimmed) || endsWithResult(moveTextLines)
+                    || nextLineRestartsAtMoveOne(lines, after: lineIndex)) {
                 if !moveTextLines.isEmpty || moveTextOverflow {
                     if !moveTextOverflow {
                         let moveText = moveTextLines.joined(separator: "\n")
@@ -264,6 +267,27 @@ public enum PGNParser {
         }
 
         return games
+    }
+
+    private static func endsWithResult(_ lines: [String]) -> Bool {
+        guard let last = lines.last?.split(whereSeparator: \.isWhitespace).last else { return false }
+        return ["1-0", "0-1", "1/2-1/2", "*"].contains(String(last))
+    }
+
+    private static func nextLineRestartsAtMoveOne(_ lines: [Substring], after index: Int) -> Bool {
+        guard let next = lines[(index + 1)...].first(where: { !$0.allSatisfy(\.isWhitespace) }) else { return false }
+        let word = next.drop(while: \.isWhitespace)
+        guard word.hasPrefix("1.") else { return false }
+        return word.dropFirst(2).first != "."
+    }
+
+    private static func isRecordHeaderLine(_ line: String) -> Bool {
+        if !parseTags(line).isEmpty { return true }
+        let inner = line.dropFirst().dropLast()
+        guard !inner.contains("["), !inner.contains("]"), !inner.isEmpty,
+              let gap = inner.firstIndex(where: \.isWhitespace) else { return false }
+        return gap != inner.startIndex && inner[..<gap].allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "_") }
+            && !inner[gap...].allSatisfy(\.isWhitespace)
     }
 
     /// The line holding the next brace from `start` if that brace closes a
