@@ -11,6 +11,28 @@ breaking `0.10.0`.
 
 Published tags are never moved or re-cut.
 
+## [0.15.0] — 2026-11-02
+
+### Changed
+
+- Positions with only kings and bishops on squares of one color are dead
+  positions. `gameState` can now report a draw, changing an exported Result.
+
+### Added
+
+- Lenient load reports expose `leadingComments` and
+  `canReplaceStoredTextKeepingLeadingComments` for callers preserving those
+  comments separately.
+- Perft regressions cover mirrored positions and special moves.
+
+### Fixed
+
+- PGN parsing accepts a leading byte order mark; default PGN dates use a fixed
+  locale and calendar; pasted FEN fields accept whitespace separators.
+- Tag recovery remains compatible with stored rows. The `½-½` spelling stays a
+  move token, preserving existing replay behavior.
+- Exported fractional clock readings carry rounding into minutes and hours.
+
 ## [0.14.1] — 2026-11-01
 
 ### Added

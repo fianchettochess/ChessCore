@@ -20,6 +20,32 @@ final class PGNClockTests: XCTestCase {
         XCTAssertNil(PGNParser.parseEngineComment("+1.2; best Nf3").clockSeconds)
     }
 
+    func testExportCarriesRoundedClockFieldsSoReadersKeepTheClock() throws {
+        let cases: [(TimeInterval, String)] = [
+            (59.96, "[%clk 0:01:00.0]"),
+            (59.95, "[%clk 0:01:00.0]"),
+            (9.97, "[%clk 0:00:10.0]"),
+            (3599.96, "[%clk 1:00:00.0]"),
+            (7199.96, "[%clk 2:00:00.0]"),
+            (0.04, "[%clk 0:00:00.0]"),
+            (65.34, "[%clk 0:01:05.3]"),
+            (1.25, "[%clk 0:00:01.2]"),
+            (1.15, "[%clk 0:00:01.1]"),
+            (180, "[%clk 0:03:00]")
+        ]
+        for (seconds, expected) in cases {
+            let game = Game()
+            XCTAssertTrue(game.loadPGN("1. e4 *"))
+            game.mainLine[0].clockSeconds = seconds
+            let text = PGNExporter.moveText(for: game.rootChildren)
+            XCTAssertTrue(text.contains(expected), "\(seconds): \(text)")
+            let restored = Game()
+            XCTAssertTrue(restored.loadPGN(text + " *"), "\(seconds): \(text)")
+            let clock = try XCTUnwrap(restored.mainLine.first?.clockSeconds, "\(seconds): \(text)")
+            XCTAssertEqual(clock, seconds, accuracy: 0.051, "\(seconds): \(text)")
+        }
+    }
+
     // MARK: - Implausible clocks
 
     /// The exporter converts through `Int`, which traps on anything it cannot

@@ -808,15 +808,18 @@ extension PGNExporter {
         var body = ""
 
         if let seconds = clockSeconds {
-            let totalInt = Int(seconds)
-            let h = totalInt / 3600
-            let m = (totalInt % 3600) / 60
-            let fractional = seconds.truncatingRemainder(dividingBy: 1)
-            if fractional > 0 {
-                let s = seconds - Double(h * 3600 + m * 60)
-                body += String(format: "[%%clk %d:%02d:%04.1f]", h, m, s)
+            // Use the original seconds-field formatting to retain its rounding
+            // at halfway values, then carry its rounded tenths across fields.
+            let wholeMinutes = Int(seconds) / 60
+            let secondsField = seconds - Double(wholeMinutes * 60)
+            let roundedField = Double(String(format: "%.1f", secondsField))!
+            let tenths = wholeMinutes * 600 + Int((roundedField * 10).rounded())
+            let h = tenths / 36000
+            let m = (tenths % 36000) / 600
+            let s = (tenths % 600) / 10
+            if seconds.truncatingRemainder(dividingBy: 1) > 0 {
+                body += String(format: "[%%clk %d:%02d:%02d.%d]", h, m, s, tenths % 10)
             } else {
-                let s = totalInt % 60
                 body += String(format: "[%%clk %d:%02d:%02d]", h, m, s)
             }
         }
