@@ -305,27 +305,28 @@ public enum PGNParser {
 
     private static func endsWithResult(_ lines: [String]) -> Bool {
         let scanned = scan(lines.joined(separator: "\n"))
-        if scanned.result != nil { return true }
-        var depth = 0
-        for token in scanned.tokens {
-            switch token {
-            case .variationStart: depth += 1
-            case .variationEnd: depth = max(0, depth - 1)
-            case .move(let word) where depth == 0 && (word == "½-½" || word == "1/2"): return true
-            default: break
-            }
+        guard let word = scanned.lastMainLineWord else { return false }
+        var normalized = word
+        let trailingPunctuation = CharacterSet.punctuationCharacters.subtracting(CharacterSet(charactersIn: "-/*½"))
+        while let last = normalized.unicodeScalars.last, trailingPunctuation.contains(last) {
+            normalized.removeLast()
         }
-        return false
+        return isResult(normalized) || normalized == "½-½" || normalized == "1/2"
     }
 
     private static func nextLineIsHeaderOrEOF(_ lines: [Substring], after index: Int) -> Bool {
-        guard let next = lines[(index + 1)...].first(where: { !$0.allSatisfy(\.isWhitespace) }) else { return true }
-        let line = next.trimmingCharacters(in: .whitespaces)
-        return line.hasPrefix("[") && line.hasSuffix("]") && isRecordHeaderLine(line)
+        for next in lines[(index + 1)...] {
+            let line = next.trimmingCharacters(in: .whitespaces)
+            if line.isEmpty || next.hasPrefix("%") || line.hasPrefix(";")
+                || (line.hasPrefix("{") && line.hasSuffix("}") && line.dropFirst().firstIndex(of: "}") == line.index(before: line.endIndex)) { continue }
+            return isResult(line) || (line.hasPrefix("[") && line.hasSuffix("]") && isRecordHeaderLine(line))
+        }
+        return true
     }
 
     private static func nextLineRestartsAtMoveOne(_ lines: [Substring], after index: Int) -> Bool {
         var inComment = false
+        var variationDepth = 0
         for line in lines[(index + 1)...] {
             if line.hasPrefix("%") { continue }
             var word = line.drop(while: \.isWhitespace)
@@ -338,6 +339,12 @@ public enum PGNParser {
                     inComment = true
                     word = word.dropFirst()
                 } else if word.first == ";" { break
+                } else if word.first == "(" {
+                    variationDepth += 1
+                    word = word.dropFirst().drop(while: \.isWhitespace)
+                } else if variationDepth > 0 {
+                    if word.first == ")" { variationDepth -= 1 }
+                    word = word.dropFirst().drop(while: \.isWhitespace)
                 } else if word.first == "$" {
                     let rest = word.dropFirst().drop(while: { $0.isASCII && $0.isNumber })
                     guard rest.count < word.count - 1 else { return false }
@@ -408,9 +415,10 @@ public enum PGNParser {
     // comment syntax, or a result inside a variation, cannot end the mainline.
     private static func scan(
         _ moveText: String
-    ) -> (tokens: [PGNToken], result: String?, diagnostics: [PGNDiagnostic], hasInconsistentMoveNumbers: Bool, variationWrittenOffsets: [Int: Int]) {
+    ) -> (tokens: [PGNToken], result: String?, diagnostics: [PGNDiagnostic], hasInconsistentMoveNumbers: Bool, variationWrittenOffsets: [Int: Int], lastMainLineWord: String?) {
         var tokens: [PGNToken] = []
         var result: String?
+        var lastMainLineWord: String?
         var diagnostics: [PGNDiagnostic] = []
         var variationDepth = 0
         var previousWrittenPosition: Int?
@@ -521,10 +529,11 @@ public enum PGNParser {
                 if word.hasPrefix("$"), let nagNumber = Int(word.dropFirst()) {
                     tokens.append(.nag(nagNumber))
                 } else if isResult(word) {
-                    if variationDepth == 0 { result = word }
+                    if variationDepth == 0 { result = word; lastMainLineWord = word }
                 } else {
                     let stripped = stripMoveNumberPrefix(word)
                     if !stripped.isEmpty {
+                        if variationDepth == 0 { lastMainLineWord = stripped }
                         tokens.append(.move(stripped))
                         if trackWrittenLines && variationDepth <= maximumVariationDepth && !isReportNoise(stripped) {
                             let index = writtenLines.count - 1
@@ -544,7 +553,7 @@ public enum PGNParser {
         }
 
         for line in writtenLines.dropFirst() { recordOffset(line) }
-        return (tokens, result, diagnostics, hasInconsistentMoveNumbers, offsets)
+        return (tokens, result, diagnostics, hasInconsistentMoveNumbers, offsets, lastMainLineWord)
     }
 
     public static func flatMoves(from tokens: [PGNToken]) -> [String] {
@@ -825,7 +834,8 @@ public enum PGNParser {
 
         var variationDepth = 0
 
-        for token in tokens {
+        var bracketNoteEnd: Int?
+        for (index, token) in tokens.enumerated() {
             // Stop early once the prefix is satisfied; no remaining tokens matter.
             if moves.count >= pliesLimit { break }
             switch token {
@@ -835,6 +845,14 @@ public enum PGNParser {
                 if variationDepth > 0 { variationDepth -= 1 }
             case .move(let san):
                 guard variationDepth == 0 else { continue }
+                if let end = bracketNoteEnd, index <= end { continue }
+                if san.hasPrefix("["), let end = tokens[index...].firstIndex(where: {
+                    if case .move(let word) = $0 { return word.hasSuffix("]") }
+                    return false
+                }), tokens[index...end].allSatisfy({ if case .move = $0 { return true }; return false }) {
+                    bracketNoteEnd = end
+                    continue
+                }
                 if isReportNoise(san) || (san.hasPrefix("[") && san.hasSuffix("]")) { continue }
                 let word = readableMoveWord(san)
                 let (cleanedSan, written) = MoveAnnotation.extract(from: word.san)

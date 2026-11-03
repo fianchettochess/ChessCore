@@ -2,6 +2,60 @@ import XCTest
 @testable import ChessCore
 
 final class PGNRecordBoundaryTests: XCTestCase {
+    func testMultiwordBracketNotesCannotEmptyImportedMainLineOrPermitLossyRewrite() throws {
+        for prefix in ["", "[Event \"A\"]\n"] {
+            for note in ["[%csl Ga1]", "[%clk 0:01]"] {
+                let text = prefix + "1. e4 e5\n" + note + "\n2. Nf3 Nc6"
+                let games = PGNParser.parse(text)
+                XCTAssertEqual(games.count, 1, text)
+                let game = try XCTUnwrap(games.first)
+                XCTAssertEqual(PGNParser.parseMainLineSnapshot(from: game).moves.count, 4, text)
+                XCTAssertFalse(try XCTUnwrap(PGNParser.loadGameWithReport(from: game)).canReplaceStoredText, text)
+            }
+        }
+    }
+
+    func testTrailingNoiseAfterNoteCannotDamageStoredGameOrCauseDuplicateImport() throws {
+        for suffix in ["1-0", "*", "; end", "{end}", "%x", "%x\n; end\n{end}"] {
+            let text = "[Event \"A\"]\n\n1. e4 e5 2. Nf3\n[diagram]\n" + suffix
+            let game = try XCTUnwrap(PGNParser.parse(text).first)
+            XCTAssertEqual(game.moves, ["e4", "e5", "Nf3"], text)
+            XCTAssertNil(game.result, text)
+            XCTAssertTrue(try XCTUnwrap(PGNParser.loadGameWithReport(from: game)).canReplaceStoredText, text)
+        }
+    }
+
+    func testPunctuatedResultAndLeadingVariationCannotMergeGamesAndLoseImport() {
+        for text in ["1. e4 e5 2. Nf3 Nc6 1/2-1/2.\n[D]\n12. d4 d5 1-0",
+                     "13. Bxg5 1/2-1/2.\n[D]\n12. d4 d5 1-0",
+                     "1. e4 e5\n[Game2]\n( 1. c4 ) 1. d4 d5",
+                     "1. e4 e5\n[Game2]\n( 1. c4 ( 1. Nf3 ) e5 ) 1. d4 d5",
+                     "[Event \"A\"]\n1. e4 e5\n[Game2]\n( 1. c4 ) 1. d4 d5"] {
+            XCTAssertEqual(PGNParser.parse(text).count, 2, text)
+        }
+    }
+
+    func testOnlyLastTopLevelResultCanSplitNoteAndLoseLaterMoves() {
+        for word in ["½-½", "1/2", "1-0"] {
+            for prefix in ["", "[Event \"A\"]\n"] {
+                let text = prefix + "1. e4 e5 " + word + " 2. Nf3 Nc6\n[diagram]\n3. Bb5 a6"
+                let games = PGNParser.parse(text)
+                XCTAssertEqual(games.count, 1, text)
+                XCTAssertEqual(games.first?.moves.suffix(2), ["Bb5", "a6"], text)
+            }
+        }
+        let variation = "1. e4 e5 ( 2. Nf3 1/2 )\n[diagram]\n2. Nf3 Nc6"
+        XCTAssertEqual(PGNParser.parse(variation).count, 1)
+    }
+
+    func testAmbiguousRestartsRemainKnownLimitsRatherThanInventingGameBoundaries() {
+        for start in ["d4 d5", "12. d4 d5", "1.. d5", "1... d5"] {
+            XCTAssertEqual(PGNParser.parse("1. e4 e5\n[Game2]\n" + start).count, 1, start)
+        }
+        for text in ["1. e4 e5 1-1\n[D]\n12. d4 d5 1-0", "1. e4 e5 +-\n[D]\n1.. d5"] {
+            XCTAssertEqual(PGNParser.parse(text).count, 1, text)
+        }
+    }
     func testNoteAndRecordBoundariesPreventLosingGameMovesOnImport() throws {
         let cases: [(String, [[String]], [String?])] = [
             ("1. e4 e5\n[diagram]\n2. Nf3 Nc6", [["e4", "e5", "[diagram]", "Nf3", "Nc6"]], [nil]),
