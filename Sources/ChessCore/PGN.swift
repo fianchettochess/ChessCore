@@ -247,7 +247,14 @@ extension PGNParser {
     static func isReportNoise(_ san: String) -> Bool {
         let cleaned = MoveAnnotation.extract(from: san).cleaned
         return isMoveTextNoise(cleaned) || (!cleaned.isEmpty && cleaned.allSatisfy { $0.isASCII && $0.isNumber })
+            || isNumberedEllipsis(cleaned)
             || cleaned == "1/2" || cleaned == "½-½"
+    }
+
+    private static func isNumberedEllipsis(_ word: String) -> Bool {
+        guard word.last == "…" else { return false }
+        let number = word.dropLast()
+        return !number.isEmpty && number.allSatisfy { $0.isASCII && $0.isNumber }
     }
 
     private static func mainLineDiffers(_ input: PGNGame, game: Game) -> Bool {
@@ -403,7 +410,7 @@ extension PGNParser {
                 if isReportNoise(san) {
                     let (cleanedSan, annotation) = MoveAnnotation.extract(from: san)
                     let glyphWords: Set<String> = ["=", "+=", "=+", "+/=", "=/+", "+/-", "-/+", "+-", "-+", "∞", "±", "∓", "⩲", "⩱", "□", "N", "D"]
-                    if glyphWords.contains(san) || (cleanedSan.isEmpty && annotation != nil) || (nodeStack.count > 1 && !san.isEmpty && san.allSatisfy { $0.isASCII && $0.isNumber }) { accounting?.uncarried.append(san) }
+                    if glyphWords.contains(san) || (cleanedSan.isEmpty && annotation != nil) || (nodeStack.count > 1 && !san.isEmpty && san.allSatisfy { $0.isASCII && $0.isNumber }) || isNumberedEllipsis(san) { accounting?.uncarried.append(san) }
                     continue
                 }
                 let word = readableMoveWord(san)

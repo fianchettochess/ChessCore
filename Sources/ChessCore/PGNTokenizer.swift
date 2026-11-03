@@ -1175,11 +1175,11 @@ public enum PGNParser {
         let digits = word.prefix { $0.isASCII && $0.isNumber }
         guard !digits.isEmpty else { return nil }
         let rest = word.dropFirst(digits.count)
-        guard rest.isEmpty || rest.first == "." else { return nil }
+        guard rest.isEmpty || rest.first == "." || rest.first == "…" else { return nil }
         // An unrepresentable or zero number cannot establish a safe position.
         guard let number = Int(digits), number > 0, number <= Int.max / 2 else { return Int.max }
-        let dots = rest.prefix { $0 == "." }.count
-        return 2 * (number - 1) + (dots >= 3 ? 1 : 0)
+        let marks = rest.prefix { $0 == "." || $0 == "…" }
+        return 2 * (number - 1) + (marks.count >= 2 || marks.first == "…" ? 1 : 0)
     }
 
     private static func stripMoveNumberPrefix(_ word: String) -> String {
