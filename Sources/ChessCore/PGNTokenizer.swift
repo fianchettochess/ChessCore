@@ -626,6 +626,51 @@ public enum PGNParser {
         return nil
     }
 
+    /// Parse a word from PGN movetext, accepting notation attached to the move that
+    /// the lexer keeps in one word: `...e5`, `1\u{2026}e5`, `e4$1`, `Nf3+-`, `a8=q`, `a8/Q`.
+    /// `parseMove` stays strict for SAN that did not come from movetext.
+    public static func parseMoveWord(_ word: String, in position: Position) -> Move? {
+        parseMove(readableMoveWord(word).san, in: position)
+    }
+
+    private static let attachedGlyphs = ["+/-", "-/+", "+/=", "=/+", "+-", "-+", "+=", "=+", "\u{221E}", "\u{00B1}", "\u{2213}", "\u{2A72}", "\u{2A71}", "\u{25A1}"]
+
+    /// The move inside a movetext word. Never changes a word `parseMove` reads:
+    /// every rewrite needs a prefix or suffix that no readable SAN has.
+    static func readableMoveWord(_ word: String) -> (san: String, nag: Int?, altered: Bool) {
+        var san = Substring(word)
+        let digits = san.prefix { $0.isASCII && $0.isNumber }
+        if san.dropFirst(digits.count).first == "\u{2026}" { san = san.dropFirst(digits.count) }
+        san = san.drop { $0 == "." || $0 == "\u{2026}" }
+        var nag: Int?
+        var stripping = true
+        while stripping {
+            stripping = false
+            if let dollar = san.lastIndex(of: "$"), dollar > san.startIndex,
+               let value = Int(san[san.index(after: dollar)...]), value >= 0 {
+                nag = nag ?? value
+                san = san[..<dollar]
+                stripping = true
+            }
+            if let glyph = attachedGlyphs.first(where: { san.hasSuffix($0) && san.count > $0.count }) {
+                san = san.dropLast(glyph.count)
+                stripping = true
+            }
+        }
+        var result = String(san)
+        var marks = ""
+        while let last = result.last, "+#!?".contains(last) { marks.insert(result.removeLast(), at: marks.startIndex) }
+        if result.count >= 4, let piece = result.last, "qrbnQRBN".contains(piece) {
+            let separator = result[result.index(result.endIndex, offsetBy: -2)]
+            let rank = result[result.index(result.endIndex, offsetBy: -3)]
+            if (separator == "=" || separator == "/"), rank == "1" || rank == "8" {
+                result = result.dropLast(2) + "=" + piece.uppercased()
+            }
+        }
+        result += marks
+        return (result, nag, result != word)
+    }
+
     /// Whether a movetext word, with any quality mark already removed, marks up
     /// the previous move rather than being one: a detached `!`, the `...` of
     /// `1. ... e5`, `e.p.` after an en passant capture, or an evaluation glyph
@@ -717,8 +762,10 @@ public enum PGNParser {
                 if variationDepth > 0 { variationDepth -= 1 }
             case .move(let san):
                 guard variationDepth == 0 else { continue }
-                let (cleanedSan, annotation) = MoveAnnotation.extract(from: san)
-                if isMoveTextNoise(cleanedSan) { continue }
+                if isMoveTextNoise(MoveAnnotation.extract(from: san).cleaned) { continue }
+                let word = readableMoveWord(san)
+                let (cleanedSan, written) = MoveAnnotation.extract(from: word.san)
+                let annotation = written ?? word.nag.flatMap(MoveAnnotation.from(nag:))
                 // Generate the legal-move list once for both the SAN parse and
                 // the canonical-notation derivation.
                 let legal = MoveGenerator.legalMoves(for: position)

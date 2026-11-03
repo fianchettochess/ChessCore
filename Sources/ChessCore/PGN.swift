@@ -151,7 +151,7 @@ extension PGNParser {
         for (offset, index) in indices.enumerated() {
             guard case .move(let san) = tokens[index] else { continue }
             let legal = MoveGenerator.legalMoves(for: position)
-            if let move = parseMove(san, in: position, legalMoves: legal) {
+            if let move = parseMove(readableMoveWord(san).san, in: position, legalMoves: legal) {
                 MoveGenerator.applyMoveUnchecked(&position, move)
                 ply += 1
                 continue
@@ -163,7 +163,7 @@ extension PGNParser {
                 var trial = start
                 for following in indices.dropFirst(offset + 1) {
                     guard case .move(let next) = tokens[following],
-                          let move = parseMove(next, in: trial) else { return false }
+                          let move = parseMoveWord(next, in: trial) else { return false }
                     MoveGenerator.applyMoveUnchecked(&trial, move)
                 }
                 return true
@@ -260,7 +260,7 @@ extension PGNParser {
             case .variationStart: depth += 1
             case .variationEnd: depth = max(0, depth - 1)
             case .move(let san) where depth == 0 && !isReportNoise(san):
-                guard let move = parseMove(san, in: position) else { return true }
+                guard let move = parseMoveWord(san, in: position) else { return true }
                 moves.append(move)
                 MoveGenerator.applyMoveUnchecked(&position, move)
             default: break
@@ -309,7 +309,8 @@ extension PGNParser {
             var materializedNodeCount = 0
             for (index, san) in pgnGame.moves.enumerated() {
                 if isMoveTextNoise(MoveAnnotation.extract(from: san).cleaned) { continue }
-                guard let move = parseMove(san, in: game.position) else {
+                let word = readableMoveWord(san)
+                guard let move = parseMove(word.san, in: game.position) else {
                     if rejectsUnparseableMainLine {
                         throw PGNDiagnostic.unparseableMainlineMove(
                             san: MoveAnnotation.extract(from: san).cleaned,
@@ -326,8 +327,13 @@ extension PGNParser {
                         maximumNodes: maximumTreeNodes
                     )
                 }
+                if word.altered { accounting?.uncarried.append(san) }
                 game.applyMoveFromPGN(move)
-                if let node = game.currentNode { accounting?.record(MoveAnnotation.extract(from: san).annotation, for: node) }
+                if let node = game.currentNode {
+                    let annotation = MoveAnnotation.extract(from: word.san).annotation ?? word.nag.flatMap(MoveAnnotation.from(nag:))
+                    accounting?.record(annotation, for: node)
+                    if word.altered, let annotation { node.annotation = annotation }
+                }
                 materializedNodeCount += 1
             }
         } else {
@@ -394,12 +400,15 @@ extension PGNParser {
             }
             switch token {
             case .move(let san):
-                let (cleanedSan, annotation) = MoveAnnotation.extract(from: san)
                 if isReportNoise(san) {
+                    let (cleanedSan, annotation) = MoveAnnotation.extract(from: san)
                     let glyphWords: Set<String> = ["=", "+=", "=+", "+/=", "=/+", "+/-", "-/+", "+-", "-+", "∞", "±", "∓", "⩲", "⩱", "□", "N", "D"]
                     if glyphWords.contains(san) || (cleanedSan.isEmpty && annotation != nil) || (nodeStack.count > 1 && !san.isEmpty && san.allSatisfy { $0.isASCII && $0.isNumber }) { accounting?.uncarried.append(san) }
                     continue
                 }
+                let word = readableMoveWord(san)
+                let (cleanedSan, writtenAnnotation) = MoveAnnotation.extract(from: word.san)
+                let annotation = writtenAnnotation ?? word.nag.flatMap(MoveAnnotation.from(nag:))
                 let currentPos: Position
                 if let last = nodeStack.last, let node = last {
                     currentPos = node.positionAfter
@@ -423,6 +432,8 @@ extension PGNParser {
                     }
                     continue
                 }
+
+                if word.altered { accounting?.uncarried.append(san) }
 
                 let parentNode = nodeStack.last ?? nil
                 let siblings = parentNode?.children ?? game.rootChildren
@@ -620,7 +631,7 @@ extension PGNParser {
                     let cleaned = MoveAnnotation.extract(from: san).cleaned
                     if isReportNoise(san) { continue }
                     let i = frames.count - 1
-                    guard let move = parseMove(cleaned, in: frames[i].position) else { return false }
+                    guard let move = parseMoveWord(cleaned, in: frames[i].position) else { return false }
                     frames[i].before = frames[i].position
                     MoveGenerator.applyMoveUnchecked(&frames[i].position, move)
                     frames[i].pending = false
