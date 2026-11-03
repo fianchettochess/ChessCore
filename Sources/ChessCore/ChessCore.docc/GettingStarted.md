@@ -16,7 +16,7 @@ In your `Package.swift`:
 ```swift
 // As a remote dependency:
 dependencies: [
-    .package(url: "https://github.com/fianchettochess/ChessCore.git", .upToNextMinor(from: "0.15.0")),
+    .package(url: "https://github.com/fianchettochess/ChessCore.git", .upToNextMinor(from: "0.16.0")),
 ],
 targets: [
     .target(

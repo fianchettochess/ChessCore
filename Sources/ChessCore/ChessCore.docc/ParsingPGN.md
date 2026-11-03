@@ -45,6 +45,20 @@ print(game.moveCount)   // full-move count
 print(game.moves)       // ["e4", "e5", "Nf3", "Nc6", "Bb5", ...]
 ```
 
+Records whose movetext exceeds 8 MiB are skipped whole. Use
+``PGNParser/parseCounted(_:)`` when an import needs to detect those omissions:
+`oversizedRecordsSkipped` gives the count, and `firstRecordSkipped` indicates
+that a skipped record preceded the first returned game. `parse(_:)` returns only
+the surviving games. The string overload of `loadGame(from:)` returns `nil`
+when the first record was skipped; a later skipped record does not prevent it
+from loading the first game.
+
+Bracketed note lines can remain in movetext instead of starting a new record;
+a preceding blank line still starts a record. A valid unquoted FEN tag is read
+when no FEN has already been found, but other unquoted tags are not recovered.
+Re-importing a file affected by either change can create a new row if its
+tokens or tags differ from the earlier import.
+
 Check `game.diagnostics` before importing. For example, a tag roster with no
 movetext is returned for inspection with `.tagsOnlyRecord` rather than being
 indistinguishable from a deliberately empty game. A `{` comment that never
@@ -151,6 +165,11 @@ if let move = PGNParser.parseMove("e4", in: position) {
 }
 ```
 
+For words taken directly from movetext, use
+``PGNParser/parseMoveWord(_:in:)``. It also reads attached ellipses, NAGs,
+evaluation glyphs, and supported promotion spellings. It returns a move; use
+the full loader and its report when annotations and rewrite safety matter.
+
 ## Write PGN
 
 ``PGNExporter/tokenText(from:)`` serializes a game's `moveTokens` (or falls back
@@ -226,3 +245,10 @@ orders is displayed in standard order and refused; the original order cannot be
 recovered from those bytes. `tokenText` removes move numbers, including when
 importing numbered text, so an import can discard the evidence used to resolve
 placement and create a row that later displays differently or is refused.
+
+The reader reports respelled move words and pawn captures inferred without a
+source file as uncarried text, preventing replacement through the report. Two
+dots now count as Black's move number, which can change eligibility in either
+direction. In particular, nested two-dot text can pass the report while a
+rewrite changes tokens; check stored and exported identity before replacing an
+unpinned row. Tokenization and `tokenText` themselves have not changed.

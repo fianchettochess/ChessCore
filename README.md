@@ -55,7 +55,7 @@ UCI backend.
 Add ChessCore to your package dependencies:
 
 ```swift
-.package(url: "https://github.com/fianchettochess/ChessCore.git", .upToNextMinor(from: "0.15.0"))
+.package(url: "https://github.com/fianchettochess/ChessCore.git", .upToNextMinor(from: "0.16.0"))
 ```
 
 Then add `"ChessCore"` to the dependencies of any target that uses it.

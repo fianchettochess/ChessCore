@@ -11,7 +11,32 @@ breaking `0.10.0`.
 
 Published tags are never moved or re-cut.
 
-## [0.15.1] — 2026-11-02
+## [0.16.0] — 2026-11-02
+
+### Added
+
+- `PGNParser.parseCounted(_:)` reports oversized records skipped and whether
+  one preceded the first returned game. `parse(_:)` continues to return games
+  alone. `loadGame(from: String)` returns `nil` if the first record was skipped.
+- `PGNParser.parseMoveWord(_:in:)` reads movetext words with attached notation;
+  `parseMove(_:in:)` remains the strict single-move entry point.
+
+### Changed
+
+- PGN reading keeps bracketed note lines within their game when the record
+  boundary rules permit it, and accepts a valid unquoted FEN tag. A blank line
+  before a bracketed note can still split a game. Re-importing affected files
+  can produce a new row when the resulting tokens or tags differ.
+- Replay reads attached ellipses, NAGs, evaluation glyphs and certain promotion
+  spellings, including in variations. Respelled words are reported as
+  uncarried, so they are not safe to replace using the lenient report alone.
+  Main-line snapshots also skip the same notation noise as the loader.
+- Two dots now identify Black's move number. This can change rewrite eligibility
+  in either direction. In nested variations eligibility alone does not guarantee
+  unchanged identity; callers must compare stored and exported identity before
+  replacing an unpinned row. The tokenizer and `tokenText` are unchanged.
+- A pawn capture inferred without its source file remains readable, but the
+  lenient report refuses replacing its original text.
 
 ### Fixed
 
