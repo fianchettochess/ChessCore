@@ -78,6 +78,17 @@ private final class PGNLoadAccounting {
 
 extension PGNParser {
 
+    // A bare destination can be read as a pawn capture, but exporting it
+    // adds the origin file and changes the stored token.
+    private static func isInferredPawnCapture(_ san: String, _ move: Move) -> Bool {
+        guard move.piece == .pawn, move.from.file != move.to.file else { return false }
+        var word = san
+        while let last = word.last, "+#!?".contains(last) { word.removeLast() }
+        guard word.count >= 2, Square(algebraic: String(word.prefix(2))) != nil else { return false }
+        let rest = word.dropFirst(2)
+        return rest.isEmpty || rest.first == "=" || (rest.count == 1 && rest.first.map { "QRBNqrbn".contains($0) } == true)
+    }
+
     /// Maximum number of `MoveNode` objects materialized for one PGN game,
     /// including variations. This is deliberately far above practical game
     /// trees while bounding adversarial, compact repetition input.
@@ -334,7 +345,7 @@ extension PGNParser {
                         maximumNodes: maximumTreeNodes
                     )
                 }
-                if word.altered { accounting?.uncarried.append(san) }
+                if word.altered || isInferredPawnCapture(word.san, move) { accounting?.uncarried.append(san) }
                 game.applyMoveFromPGN(move)
                 if let node = game.currentNode {
                     let annotation = MoveAnnotation.extract(from: word.san).annotation ?? word.nag.flatMap(MoveAnnotation.from(nag:))
@@ -440,7 +451,7 @@ extension PGNParser {
                     continue
                 }
 
-                if word.altered { accounting?.uncarried.append(san) }
+                if word.altered || isInferredPawnCapture(cleanedSan, move) { accounting?.uncarried.append(san) }
 
                 let parentNode = nodeStack.last ?? nil
                 let siblings = parentNode?.children ?? game.rootChildren
