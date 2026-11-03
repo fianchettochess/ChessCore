@@ -596,14 +596,13 @@ public struct Position: Equatable, Sendable {
             guard let target = Square(algebraic: String(parts[3])),
                   target.rank == (activeColor == .white ? 5 : 2)
             else { return nil }
-            // Honor the EP target only when the enemy pawn that would be captured
-            // is actually present on the square it just double-pushed to.
-            // Otherwise pseudo-legal generation would emit an en-passant capture
-            // of an empty square (an illegal move). A stale/phantom EP field is
-            // silently dropped, not rejected — the rest of the FEN is valid.
+            // Honor the EP target only when it is empty and the enemy pawn that
+            // would be captured is present on its double-push destination.
+            // Otherwise move generation could emit an illegal en-passant capture.
+            // Drop the stale field while retaining the rest of the position.
             let capturedRank = activeColor == .white ? target.rank - 1 : target.rank + 1
             let mover: PieceColor = activeColor == .white ? .black : .white
-            if self[Square(file: target.file, rank: capturedRank)] == Piece(type: .pawn, color: mover) {
+            if self[target] == nil, self[Square(file: target.file, rank: capturedRank)] == Piece(type: .pawn, color: mover) {
                 enPassantTarget = target
             }
         }

@@ -538,9 +538,8 @@ struct BitBoard {
         let kingBoard = pieces[us, 0]
         // A legal position always has a king; guard defensively so a degenerate
         // (kingless) board can never make `lsbIndex` return 64 and index the
-        // 64-entry attack tables out of bounds. `Position(fen:)` rejects kingless
-        // FENs, so this is unreachable in normal use — it just makes the legality
-        // check total rather than crashing on a hand-built/corrupt position.
+        // 64-entry attack tables out of bounds. `Position(fen:)` is syntactic
+        // and can produce a kingless board, so this guard is reachable.
         guard kingBoard != 0 else { return false }
         let kingSq = lsbIndex(kingBoard)
         return !squareAttacked(kingSq, byColor: them, pieces: pieces, occAll: occAll)

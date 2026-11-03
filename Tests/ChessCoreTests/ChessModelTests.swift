@@ -56,6 +56,26 @@ final class ChessModelTests: XCTestCase {
         XCTAssertNil(Position(fen: "8/8/8/8/8/8/8/8 w - - 0 1 trailing"))
     }
 
+    func testEnPassantTargetOnAnOccupiedSquareIsDropped() throws {
+        let cases = [
+            ("4k3/8/n7/pP6/8/8/8/4K3 w - a6 0 1", "4k3/8/n7/pP6/8/8/8/4K3 w - - 0 1"),
+            ("4k3/8/N7/pP6/8/8/8/4K3 w - a6 0 1", "4k3/8/N7/pP6/8/8/8/4K3 w - - 0 1"),
+            ("4k3/8/8/8/Pp6/N7/8/4K3 b - a3 0 1", "4k3/8/8/8/Pp6/N7/8/4K3 b - - 0 1")
+        ]
+        for (input, expected) in cases {
+            let position = try XCTUnwrap(Position(fen: input))
+            XCTAssertEqual(position.fen, expected, input)
+            let moves = MoveGenerator.legalMoves(for: position)
+            XCTAssertEqual(Set(moves.map(\.uci)).count, moves.count, input)
+            XCTAssertFalse(moves.contains(where: \.isEnPassant), input)
+        }
+        XCTAssertEqual(Position(fen: "4k3/8/n7/pP6/8/8/8/4K3 w - a6")?.positionKey,
+                       "4k3/8/n7/pP6/8/8/8/4K3 w - -")
+        let control = try XCTUnwrap(Position(fen: "4k3/8/8/pP6/8/8/8/4K3 w - a6 0 1"))
+        XCTAssertEqual(control.fen, "4k3/8/8/pP6/8/8/8/4K3 w - a6 0 1")
+        XCTAssertTrue(MoveGenerator.legalMoves(for: control).contains(where: \.isEnPassant))
+    }
+
     func testRepetitionKeyNormalizesOnlyNonActionableEnPassant() {
         let phantom = Position(fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1")!
         let noTarget = Position(fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1")!
