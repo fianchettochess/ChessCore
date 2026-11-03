@@ -133,10 +133,23 @@ public struct ParsedMainLine: Sendable {
 // tree. The companion file `PGN.swift` keeps the
 // `Game`-bound `loadGame` overloads and the exporter.
 
+/// Parsed records and the oversized records discarded while reading them.
+public struct PGNParseResult: Sendable {
+    public let games: [PGNGame]
+    public let oversizedRecordsSkipped: Int
+    /// Whether an oversized record occurred before the first returned game.
+    public let firstRecordSkipped: Bool
+}
+
 public enum PGNParser {
 
     public static func parse(_ pgn: String) -> [PGNGame] {
-        parse(pgn, maximumMoveTextBytes: 8 * 1024 * 1024)
+        parseCounted(pgn).games
+    }
+
+    /// Parses complete records, reporting those discarded for exceeding the movetext limit.
+    public static func parseCounted(_ pgn: String) -> PGNParseResult {
+        parseCounted(pgn, maximumMoveTextBytes: 8 * 1024 * 1024)
     }
 
     /// Internal limit seam keeps oversized-input behavior directly testable
@@ -145,8 +158,17 @@ public enum PGNParser {
         _ pgn: String,
         maximumMoveTextBytes: Int
     ) -> [PGNGame] {
+        parseCounted(pgn, maximumMoveTextBytes: maximumMoveTextBytes).games
+    }
+
+    static func parseCounted(
+        _ pgn: String,
+        maximumMoveTextBytes: Int
+    ) -> PGNParseResult {
         precondition(maximumMoveTextBytes > 0)
         var games: [PGNGame] = []
+        var oversizedRecordsSkipped = 0
+        var firstRecordSkipped = false
         var current = PGNGame()
         var moveTextLines: [String] = []
         var moveTextByteCount = 0
@@ -206,6 +228,9 @@ public enum PGNParser {
                         current.variationWrittenOffsets = scanned.variationWrittenOffsets
                         current.diagnostics.append(contentsOf: scanned.diagnostics)
                         games.append(current)
+                    } else {
+                        oversizedRecordsSkipped += 1
+                        if games.isEmpty { firstRecordSkipped = true }
                     }
                     current = PGNGame()
                     moveTextLines.removeAll(keepingCapacity: true)
@@ -254,7 +279,10 @@ public enum PGNParser {
             }
         }
 
-        if !moveTextOverflow && (!moveTextLines.isEmpty || !current.tags.isEmpty) {
+        if moveTextOverflow {
+            oversizedRecordsSkipped += 1
+            if games.isEmpty { firstRecordSkipped = true }
+        } else if !moveTextLines.isEmpty || !current.tags.isEmpty {
             if moveTextLines.isEmpty && !current.tags.isEmpty {
                 current.diagnostics.append(.tagsOnlyRecord)
             }
@@ -270,7 +298,8 @@ public enum PGNParser {
             games.append(current)
         }
 
-        return games
+        return PGNParseResult(games: games, oversizedRecordsSkipped: oversizedRecordsSkipped,
+                              firstRecordSkipped: firstRecordSkipped)
     }
 
     private static func endsWithResult(_ lines: [String]) -> Bool {

@@ -96,8 +96,8 @@ extension PGNParser {
     static let maximumVariationDepth = 1_024
 
     public static func loadGame(from pgn: String) -> Game? {
-        let pgnGames = parse(pgn)
-        guard let pgnGame = pgnGames.first else { return nil }
+        let parsed = parseCounted(pgn)
+        guard !parsed.firstRecordSkipped, let pgnGame = parsed.games.first else { return nil }
         return loadGame(from: pgnGame)
     }
 
