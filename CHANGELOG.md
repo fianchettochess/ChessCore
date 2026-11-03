@@ -42,7 +42,11 @@ Published tags are never moved or re-cut.
 
 - An occupied en-passant target in a FEN is dropped, preventing duplicate or
   illegal captures. For these positions, which cannot arise from legal play,
-  FEN and position keys now contain `-` for en passant. An older build can
+  FEN and `positionKey` now contain `-` for en passant. FianchettoKit’s
+  endgame `sourceDigest` and continuity fingerprint also change, causing
+  re-extraction and cross-version fingerprint differences; extraction can change
+  between completed and rejected. Repertoire root `anchorFEN` changes too,
+  so re-import can produce a different companion chapter ID. An older build can
   miss a lookup made with the new key if it stored the former occupied target.
 
 ## [0.15.0] — 2026-11-02

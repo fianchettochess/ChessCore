@@ -31,6 +31,38 @@ final class PGNRecordBoundaryTests: XCTestCase {
         XCTAssertEqual(PGNExporter.moveText(for: report.game.rootChildren).trimmingCharacters(in: .whitespacesAndNewlines), "1. e4 e5 2. Nf3 Nc6")
     }
 
+    func testNoteSnapshotsAndBoundariesKeepGamesReadableAndSeparate() throws {
+        for prefix in ["", "[Event \"A\"]\n"] {
+            let game = try XCTUnwrap(PGNParser.parse(prefix + "1. e4 e5\n[diagram]\n2. Nf3 Nc6").first)
+            XCTAssertEqual(PGNParser.parseMainLineSnapshot(from: game).moves.count, 4)
+            XCTAssertFalse(try XCTUnwrap(PGNParser.loadGameWithReport(from: game)).canReplaceStoredText)
+        }
+        for suffix in ["", "\n[Event \"B\"]\n1. d4 d5 0-1"] {
+            let games = PGNParser.parse("[Event \"A\"]\n1. e4 e5 2. Nf3\n[diagram]" + suffix)
+            XCTAssertEqual(games.count, suffix.isEmpty ? 1 : 2)
+            XCTAssertEqual(games[0].moves, ["e4", "e5", "Nf3"])
+            XCTAssertTrue(try XCTUnwrap(PGNParser.loadGameWithReport(from: games[0])).canReplaceStoredText)
+        }
+    }
+
+    func testResultAndRestartNoiseCannotMergeSeparateGamesOrLoseResults() {
+        let endings: [(String, String?)] = [("1-0 {White wins}", "1-0"), ("0-1 ; note", "0-1"),
+                                          ("1/2-1/2 $1", "1/2-1/2"), ("½-½", nil), ("1/2", nil)]
+        for (ending, result) in endings {
+            let text = "1. e4 e5 " + ending + "\n[Game2]\nd4 d5 0-1"
+            let games = PGNParser.parse(text)
+            XCTAssertEqual(games.map(\.result), [result, "0-1"], text)
+            XCTAssertEqual(games.count, 2, text)
+        }
+        for start in ["{note} 1. d4 d5", "$1 1 d4 d5", "% escape\n; comment\n1. d4 d5"] {
+            let games = PGNParser.parse("1. e4 e5\n[Game2]\n" + start)
+            XCTAssertEqual(games.count, 2, start)
+            XCTAssertEqual(games.map { PGNParser.parseMainLineSnapshot(from: $0).moves.count }, [2, 2], start)
+        }
+        // Without a result, Black's move one can also continue the first game.
+        XCTAssertEqual(PGNParser.parse("1. e4\n[diagram]\n1... e5").count, 1)
+    }
+
     func testOversizedGameNoteCannotCreateTruncatedImport() {
         let text = "1. d4 {" + String(repeating: "x", count: 40) + "}\n[diagram]\n2. c4 d5 *"
         XCTAssertTrue(PGNParser.parse(text, maximumMoveTextBytes: 24).isEmpty)

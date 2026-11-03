@@ -215,6 +215,7 @@ public enum PGNParser {
             if !inBraceComment && trimmed.hasPrefix("[") && trimmed.hasSuffix("]")
                 && ((moveTextLines.isEmpty && !moveTextOverflow) || previousLineWasBlank
                     || isRecordHeaderLine(trimmed) || endsWithResult(moveTextLines)
+                    || nextLineIsHeaderOrEOF(lines, after: lineIndex)
                     || nextLineRestartsAtMoveOne(lines, after: lineIndex)) {
                 if !moveTextLines.isEmpty || moveTextOverflow {
                     if !moveTextOverflow {
@@ -303,15 +304,51 @@ public enum PGNParser {
     }
 
     private static func endsWithResult(_ lines: [String]) -> Bool {
-        guard let last = lines.last?.split(whereSeparator: \.isWhitespace).last else { return false }
-        return ["1-0", "0-1", "1/2-1/2", "*"].contains(String(last))
+        let scanned = scan(lines.joined(separator: "\n"))
+        if scanned.result != nil { return true }
+        var depth = 0
+        for token in scanned.tokens {
+            switch token {
+            case .variationStart: depth += 1
+            case .variationEnd: depth = max(0, depth - 1)
+            case .move(let word) where depth == 0 && (word == "½-½" || word == "1/2"): return true
+            default: break
+            }
+        }
+        return false
+    }
+
+    private static func nextLineIsHeaderOrEOF(_ lines: [Substring], after index: Int) -> Bool {
+        guard let next = lines[(index + 1)...].first(where: { !$0.allSatisfy(\.isWhitespace) }) else { return true }
+        let line = next.trimmingCharacters(in: .whitespaces)
+        return line.hasPrefix("[") && line.hasSuffix("]") && isRecordHeaderLine(line)
     }
 
     private static func nextLineRestartsAtMoveOne(_ lines: [Substring], after index: Int) -> Bool {
-        guard let next = lines[(index + 1)...].first(where: { !$0.allSatisfy(\.isWhitespace) }) else { return false }
-        let word = next.drop(while: \.isWhitespace)
-        guard word.hasPrefix("1.") else { return false }
-        return word.dropFirst(2).first != "."
+        var inComment = false
+        for line in lines[(index + 1)...] {
+            if line.hasPrefix("%") { continue }
+            var word = line.drop(while: \.isWhitespace)
+            while !word.isEmpty {
+                if inComment {
+                    guard let end = word.firstIndex(of: "}") else { break }
+                    word = word[word.index(after: end)...].drop(while: \.isWhitespace)
+                    inComment = false
+                } else if word.first == "{" {
+                    inComment = true
+                    word = word.dropFirst()
+                } else if word.first == ";" { break
+                } else if word.first == "$" {
+                    let rest = word.dropFirst().drop(while: { $0.isASCII && $0.isNumber })
+                    guard rest.count < word.count - 1 else { return false }
+                    word = rest.drop(while: \.isWhitespace)
+                } else {
+                    if word.hasPrefix("1.") { return word.dropFirst(2).first != "." }
+                    return word.first == "1" && word.dropFirst().first?.isWhitespace == true
+                }
+            }
+        }
+        return false
     }
 
     private static func isRecordHeaderLine(_ line: String) -> Bool {
@@ -468,6 +505,13 @@ public enum PGNParser {
                     interveningMoves = 0
                 }
                 if trackWrittenLines, variationDepth <= maximumVariationDepth, var position = writtenPosition, position != Int.max {
+                    // A foreign two-dot White variation head used to be read as White.
+                    // Preserve that reading when its parent is at that White ply.
+                    let rest = word.drop(while: { $0.isASCII && $0.isNumber })
+                    let marks = rest.prefix(while: { $0 == "." || $0 == "…" })
+                    let line = writtenLines[writtenLines.count - 1]
+                    if variationDepth > 0, line.moveCount == 0, marks == "..",
+                       line.parentPosition == position - 1 { position -= 1 }
                     if word.allSatisfy({ $0.isNumber || $0 == "." }) {
                         let next = moveText[i...].drop(while: \.isWhitespace)
                         if next.hasPrefix("...") || next.hasPrefix("…") { position += 1 }
@@ -791,7 +835,7 @@ public enum PGNParser {
                 if variationDepth > 0 { variationDepth -= 1 }
             case .move(let san):
                 guard variationDepth == 0 else { continue }
-                if isReportNoise(san) { continue }
+                if isReportNoise(san) || (san.hasPrefix("[") && san.hasSuffix("]")) { continue }
                 let word = readableMoveWord(san)
                 let (cleanedSan, written) = MoveAnnotation.extract(from: word.san)
                 let annotation = written ?? word.nag.flatMap(MoveAnnotation.from(nag:))
