@@ -762,7 +762,7 @@ public enum PGNParser {
                 if variationDepth > 0 { variationDepth -= 1 }
             case .move(let san):
                 guard variationDepth == 0 else { continue }
-                if isMoveTextNoise(MoveAnnotation.extract(from: san).cleaned) { continue }
+                if isReportNoise(san) { continue }
                 let word = readableMoveWord(san)
                 let (cleanedSan, written) = MoveAnnotation.extract(from: word.san)
                 let annotation = written ?? word.nag.flatMap(MoveAnnotation.from(nag:))
