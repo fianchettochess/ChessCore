@@ -457,7 +457,25 @@ public struct Position: Equatable, Sendable {
         }
         set {
             guard square.isValid else { return }
+            let previous = board[square.index]
             board[square.index] = newValue
+            // Setup editors use the subscript too. Keep the king cache valid
+            // regardless of whether a drag clears its source or fills its target
+            // first; move generation also relies on these squares.
+            if let piece = newValue, piece.type == .king {
+                if piece.color == .white { whiteKingSquare = square }
+                else { blackKingSquare = square }
+            }
+            if let previous, previous.type == .king,
+               newValue != previous {
+                let cached = previous.color == .white ? whiteKingSquare : blackKingSquare
+                if cached == square {
+                    let remaining = board.firstIndex(of: previous).map(Square.fromIndex)
+                        ?? Square(file: 4, rank: previous.color == .white ? 0 : 7)
+                    if previous.color == .white { whiteKingSquare = remaining }
+                    else { blackKingSquare = remaining }
+                }
+            }
         }
     }
 
