@@ -526,6 +526,10 @@ public enum PGNParser {
                     }
                     writtenLines[writtenLines.count - 1].pendingPosition = position
                 }
+                // Every `$n` that `Int` reads stays `.nag(n)`, in or out of the
+                // standard 0...255 range: tokens feed stored-row identity.
+                // A digit run too long for `Int` stays a word; the loader keeps
+                // the game and reports the word as a dropped token.
                 if word.hasPrefix("$"), let nagNumber = Int(word.dropFirst()) {
                     tokens.append(.nag(nagNumber))
                 } else if isResult(word) {
@@ -728,11 +732,19 @@ public enum PGNParser {
         var stripping = true
         while stripping {
             stripping = false
-            if let dollar = san.lastIndex(of: "$"), dollar > san.startIndex,
-               let value = Int(san[san.index(after: dollar)...]), value >= 0 {
-                nag = nag ?? value
-                san = san[..<dollar]
-                stripping = true
+            if let dollar = san.lastIndex(of: "$"), dollar > san.startIndex {
+                let digits = san[san.index(after: dollar)...]
+                if let value = Int(digits), value >= 0 {
+                    nag = nag ?? value
+                    san = san[..<dollar]
+                    stripping = true
+                } else if !digits.isEmpty, digits.allSatisfy({ $0.isASCII && $0.isNumber }) {
+                    // A NAG too large for `Int` is out of range: drop it and
+                    // keep the move. Unread, the word stayed unparseable and
+                    // cost the move and the rest of its line.
+                    san = san[..<dollar]
+                    stripping = true
+                }
             }
             if let glyph = attachedGlyphs.first(where: { san.hasSuffix($0) && san.count > $0.count }) {
                 san = san.dropLast(glyph.count)
