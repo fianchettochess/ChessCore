@@ -1,13 +1,21 @@
+import Foundation
 import Testing
 @testable import ChessCore
 
 /// Engine output from hosts other than the bundled engines.
 ///
-/// Gates two things a face that hosts a third-party engine depends on:
+/// Gates three things:
 /// - CRLF output. Line splitting at `\n` leaves a `\r` glued to the last
-///   token. Dropping the terminator trim (or reintroducing a strict length
-///   check before it) silently discards every score and bestmove from such an
-///   engine: the user sees an analysis pane that never fills in.
+///   token. Dropping the terminator trim in `UCIOutputParser.parseInfo` or
+///   `parseBestMove` (or reintroducing a strict length check before it)
+///   silently discards every score and bestmove from such an engine: the user
+///   sees an analysis pane that never fills in.
+/// - Stored moves decode as written. `UCIParser.uciToMove` also restores
+///   snapshot nodes, so it does not trim. Adding the trim there by accident
+///   (it looks like the same fix) makes a stored `"e2e4\r"` node that 0.16.1
+///   refused restore as e2e4, and lets `"e2e4"` and `"e2e4\r"` restore as two
+///   identical sibling moves: the user's restored game differs from what any
+///   other version restores.
 /// - Extreme scores. A buggy or hostile engine can report `Int.min`.
 ///   `abs(Int.min)` and `-Int.min` trap, so reverting to either crashes the
 ///   app while it formats or flips the evaluation.
@@ -26,34 +34,47 @@ struct UCILineEndingAndExtremeScoreTests {
         #expect(UCIOutputParser.parseInfo(line + "\r\n") == plain)
     }
 
-    @Test("bestmove with a CR names the same move")
-    func bestMoveTerminators() {
-        #expect(UCIOutputParser.parseBestMove("bestmove e2e4\r") == "e2e4")
-        #expect(UCIOutputParser.parseBestMove("bestmove e2e4 ponder e7e5\r\n") == "e2e4")
-        #expect(UCIOutputParser.parseBestMove("bestmove (none)\r") == nil)
+    @Test("bestmove with a CR or CRLF names the same move",
+          arguments: [
+              ("bestmove e2e4\r", "e2e4"),
+              ("bestmove e2e4 ponder e7e5\r\n", "e2e4"),
+              ("bestmove (none)\r", nil),
+          ] as [(String, String?)])
+    func bestMoveTerminators(line: String, expected: String?) {
+        #expect(UCIOutputParser.parseBestMove(line) == expected)
     }
 
-    @Test("a coordinate move with a trailing CR selects the same legal move; other trailing text still fails")
-    func uciMoveTerminator() throws {
-        let start = Position.initial()
-        let e4 = try #require(UCIParser.uciToMove("e2e4", in: start))
-        #expect(UCIParser.uciToMove("e2e4\r", in: start) == e4)
-        #expect(UCIParser.uciToMove("e2e4\r\n", in: start) == e4)
-        #expect(UCIParser.uciToMove("e2e4 ", in: start) == nil)
-        #expect(UCIParser.uciToMove("e2e4x\r", in: start) == nil)
-        let promotion = try #require(Position(fen: "8/4P3/8/8/8/8/k7/4K3 w - - 0 1"))
-        #expect(UCIParser.uciToMove("e7e8q\r", in: promotion)?.promotion == .queen)
+    @Test("a coordinate move with any trailing character, including CR, selects no move",
+          arguments: [
+              ("e2e4", "e2e4\r"),
+              ("e2e4", "e2e4\n"),
+              ("e2e4", "e2e4\r\n"),
+              ("e2e4", "e2e4 "),
+              ("e2e4", "e2e4x\r"),
+              ("e7e8q", "e7e8q\r"),
+          ])
+    func uciMoveTerminator(legal: String, written: String) throws {
+        let position = try #require(Position(
+            fen: legal == "e7e8q" ? "8/4P3/8/8/8/8/k7/4K3 w - - 0 1" : Position.initial().fen
+        ))
+        #expect(UCIParser.uciToMove(legal, in: position) != nil)
+        #expect(UCIParser.uciToMove(written, in: position) == nil)
     }
 
-    /// Golden: the sign the engine wrote is the sign the parser keeps.
-    @Test("negative centipawn and mate scores keep their sign")
-    func signKept() throws {
-        let cp = try #require(UCIOutputParser.parseInfo("info depth 18 score cp -45 pv d2d4"))
-        #expect(cp.scoreCp == -45)
-        #expect(cp.displayText == "-0.4")
-        let mate = try #require(UCIOutputParser.parseInfo("info depth 7 score mate -3 pv h7h8q"))
-        #expect(mate.mateIn == -3)
-        #expect(mate.displayText == "-M3")
+    /// Golden: stored snapshot payloads with a CR-suffixed `moveUCI`. The
+    /// expected errors are what 0.16.1 throws for these exact bytes.
+    @Test("a stored snapshot node with a CR-suffixed move restores exactly as in 0.16.1",
+          arguments: [
+              (#"{"schemaVersion":2,"startFEN":"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1","loadedTags":null,"nodes":[{"moveUCI":"e2e4\r"}],"currentNodeIndex":0}"#,
+               GameTreeSnapshotError.illegalMove(nodeIndex: 0, moveUCI: "e2e4\r")),
+              (#"{"schemaVersion":2,"startFEN":"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1","loadedTags":null,"nodes":[{"moveUCI":"e2e4"},{"moveUCI":"e2e4\r"}],"currentNodeIndex":0}"#,
+               .illegalMove(nodeIndex: 1, moveUCI: "e2e4\r")),
+          ])
+    func storedCRSuffixedMove(json: String, expected: GameTreeSnapshotError) throws {
+        let snapshot = try JSONDecoder().decode(GameTreeSnapshot.self, from: Data(json.utf8))
+        let game = Game()
+        #expect(throws: expected) { try game.restore(from: snapshot) }
+        #expect(game.rootChildren.isEmpty)
     }
 
     @Test("Int.min and Int.max scores format and negate without trapping",

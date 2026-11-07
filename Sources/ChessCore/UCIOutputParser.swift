@@ -248,17 +248,21 @@ public enum UCIOutputParser {
         return move == "(none)" ? nil : String(move)
     }
 
-    /// The line without trailing line-terminator characters. An engine that
-    /// writes CRLF line endings leaves a `\r` on each line once it is split at
-    /// `\n`; left on, it is glued to the last token, so `score cp 30\r` loses
-    /// its score and `bestmove e2e4\r` yields a five-character move. Only
-    /// terminators are removed: other characters still reach the tokenizer as
-    /// before.
+    /// The line without trailing CR and LF characters. An engine that writes
+    /// CRLF line endings leaves a `\r` on each line once it is split at `\n`;
+    /// left on, it is glued to the last token, so `score cp 30\r` loses its
+    /// score and `bestmove e2e4\r` yields a five-character move. Only `\r`,
+    /// `\n` and `\r\n` are removed; every other character, including other
+    /// Unicode line separators, reaches the tokenizer as before.
+    ///
+    /// Engine output only. ``UCIParser/uciToMove(_:in:)`` does not trim: it
+    /// also decodes stored snapshot moves, and those must decode as written.
     static func withoutLineTerminator(_ line: String) -> Substring {
         var end = line.endIndex
         while end > line.startIndex {
             let previous = line.index(before: end)
-            guard line[previous].isNewline else { break }
+            let character = line[previous]
+            guard character == "\r" || character == "\n" || character == "\r\n" else { break }
             end = previous
         }
         return line[..<end]
