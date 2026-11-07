@@ -11,6 +11,36 @@ breaking `0.10.0`.
 
 Published tags are never moved or re-cut.
 
+## [0.17.0] — 2026-11-07
+
+### Added
+
+- Strict admission for new positions: `Position.strictFENIssue(_:)`,
+  `Position.init?(strictFEN:)` and `Position.structuralIssues`, reporting
+  `Position.FENAdmissionIssue` and `Position.StructuralIssue`. Use them only
+  where a position enters from outside the library (board setup, a pasted FEN,
+  a new PGN import); `Position(fen:)`, PGN loading and snapshot restore are
+  unchanged and still read every FEN they read before.
+- `StructuralIssue` cases: `missingKing`, `duplicateKing`, `pawnOnBackRank`,
+  `sideNotToMoveInCheck`, `unsupportedCastlingRight`, `invalidEnPassantTarget`
+  and `occupiedEnPassantOrigin`. `FENAdmissionIssue` adds `unreadable` and
+  `emptyRankSegment` (a `//` or a leading or trailing slash). New cases may be
+  added in a minor release.
+
+### Changed
+
+- A move word with an attached NAG too large for `Int` keeps its move and the
+  rest of its line; previously both were dropped. The word is reported as
+  uncarried, so it is not safe to replace using the lenient report alone.
+  Tokens, `tokenText` and game identity are unchanged.
+- `UCIOutputParser.parseInfo` and `parseBestMove` ignore a trailing CR, LF or
+  CRLF, so engines that write CRLF line endings report scores and best moves.
+  `UCIParser.uciToMove` is unchanged and still refuses a move with any
+  trailing character.
+- Score negation and White-POV conversion saturate: an engine score of
+  `Int.min` negates to `Int.max` instead of trapping, and `displayText`
+  formats it without trapping.
+
 ## [0.16.0] — 2026-11-02
 
 ### Added
