@@ -13,6 +13,9 @@ public enum UCIParser {
     }
 
     public static func uciToMove(_ uci: String, in legalMoves: [Move]) -> Move? {
+        // A trailing line terminator (`e2e4\r` from an engine that writes CRLF)
+        // is not part of the move. Nothing else is trimmed.
+        let uci = UCIOutputParser.withoutLineTerminator(uci)
         // Coordinate moves are exactly four characters, or five with a
         // lowercase promotion piece. Prefix parsing would let malformed
         // backup/engine data such as `e2e4junk` silently select a legal move.

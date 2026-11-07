@@ -83,12 +83,19 @@ public struct UCIInfo: Sendable, Equatable {
 
     /// White-POV centipawn value. Flips sign when the side to move is Black.
     public static func whitePovCp(_ cp: Int, sideToMoveIsWhite: Bool) -> Int {
-        sideToMoveIsWhite ? cp : -cp
+        sideToMoveIsWhite ? cp : saturatingNegation(cp)
     }
 
     /// White-POV mate distance. Positive = White mates; negative = Black mates.
     public static func whitePovMate(_ mate: Int, sideToMoveIsWhite: Bool) -> Int {
-        sideToMoveIsWhite ? mate : -mate
+        sideToMoveIsWhite ? mate : saturatingNegation(mate)
+    }
+
+    /// `-value`, except that `Int.min` (which has no positive counterpart)
+    /// becomes `Int.max`. Scores come from the engine process, and plain
+    /// negation of `Int.min` traps; the sign is what callers act on.
+    static func saturatingNegation(_ value: Int) -> Int {
+        value == .min ? .max : -value
     }
 
     /// White-POV centipawns using this line's own score (mate → ±100 000), or
@@ -120,18 +127,20 @@ public struct UCIInfo: Sendable, Equatable {
         /// avoids floating-point rounding differences between platforms.
         public var displayText: String {
             switch self {
+            // `magnitude` rather than `abs`: the value comes from the engine
+            // process, and `abs(Int.min)` traps.
             case .cp(let cp):
                 let sign = cp < 0 ? "-" : "+"
-                let a = abs(cp)
+                let a = cp.magnitude
                 return "\(sign)\(a / 100).\((a % 100) / 10)"
-            case .mate(let m): return m > 0 ? "M\(m)" : "-M\(abs(m))"
+            case .mate(let m): return m > 0 ? "M\(m)" : "-M\(m.magnitude)"
             }
         }
 
         public var negated: Score {
             switch self {
-            case .cp(let cp): .cp(-cp)
-            case .mate(let m): .mate(-m)
+            case .cp(let cp): .cp(UCIInfo.saturatingNegation(cp))
+            case .mate(let m): .mate(UCIInfo.saturatingNegation(m))
             }
         }
     }
@@ -165,7 +174,7 @@ public enum UCIOutputParser {
         // Keep tokens as Substrings (they share `line`'s buffer); convert to
         // String only where stored (`pv`). Drops a per-line intermediate [String]
         // array on the engine's highest-frequency output.
-        let tokens = line.split(separator: " ")
+        let tokens = withoutLineTerminator(line).split(separator: " ")
         guard tokens.first == "info" else { return nil }
 
 
@@ -233,10 +242,26 @@ public enum UCIOutputParser {
     /// Extract the move from a `bestmove <uci> [ponder <uci>]` line. Returns
     /// `nil` for any other line, or when the engine reports `bestmove (none)`.
     public static func parseBestMove(_ line: String) -> String? {
-        let tokens = line.split(separator: " ")
+        let tokens = withoutLineTerminator(line).split(separator: " ")
         guard tokens.first == "bestmove", tokens.count >= 2 else { return nil }
         let move = tokens[1]
         return move == "(none)" ? nil : String(move)
+    }
+
+    /// The line without trailing line-terminator characters. An engine that
+    /// writes CRLF line endings leaves a `\r` on each line once it is split at
+    /// `\n`; left on, it is glued to the last token, so `score cp 30\r` loses
+    /// its score and `bestmove e2e4\r` yields a five-character move. Only
+    /// terminators are removed: other characters still reach the tokenizer as
+    /// before.
+    static func withoutLineTerminator(_ line: String) -> Substring {
+        var end = line.endIndex
+        while end > line.startIndex {
+            let previous = line.index(before: end)
+            guard line[previous].isNewline else { break }
+            end = previous
+        }
+        return line[..<end]
     }
 
     /// Distil a batch of `UCIInfo` values (e.g. from a MultiPV search) into a
