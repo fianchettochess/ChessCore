@@ -690,7 +690,9 @@ public struct Position: Equatable, Sendable {
                message: "Renamed: the invariant is not specific to one engine.")
     public var stockfishSafeFEN: String { consistentFEN }
 
-    private var sanitizedCastlingRights: CastlingRights {
+    /// The castling rights the placement can support: each right survives only
+    /// while its king and rook stand on their start squares.
+    var sanitizedCastlingRights: CastlingRights {
         let whiteKing = Square(file: 4, rank: 0)
         let blackKing = Square(file: 4, rank: 7)
         let whiteKingOnHome = self[whiteKing] == Piece(type: .king, color: .white)

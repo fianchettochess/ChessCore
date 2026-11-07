@@ -81,6 +81,11 @@ print(position.fen)  // "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3
 - ``Position/consistentFEN``
 - ``Position/capturableEnPassantTarget``
 - ``Position/hasInsufficientMaterial``
+- ``Position/init(strictFEN:)``
+- ``Position/strictFENIssue(_:)``
+- ``Position/structuralIssues``
+- ``Position/FENAdmissionIssue``
+- ``Position/StructuralIssue``
 
 ### SAN ↔ UCI
 

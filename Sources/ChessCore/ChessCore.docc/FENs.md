@@ -21,6 +21,31 @@ let position = Position(fen:
 (placement, side, castling, en passant) and eight ranks, and it recomputes the
 king squares. It returns `nil` on malformed input.
 
+## Admitting a new position
+
+``Position/init(fen:)`` is a lenient reader, and it stays that way: a backup,
+a synced row, a snapshot or a stored PGN `[FEN]` tag must keep restoring to
+the board it always restored to. It therefore accepts boards no legal game can
+reach, such as a missing or extra king, a pawn on the back rank, or castling
+rights with no king or rook behind them.
+
+Where a new position enters the library from outside (board setup, a pasted
+FEN, a new PGN import), check it with the strict admission API instead:
+
+```swift
+switch Position.strictFENIssue(pasted) {
+case nil: break                                  // admit it
+case .unreadable?: break                         // not a FEN at all
+case .emptyRankSegment?: break                   // "//" or a stray slash
+case .structure(let issue)?: print(issue)        // e.g. .duplicateKing(.white)
+}
+let admitted = Position(strictFEN: pasted)       // nil unless it passes
+```
+
+``Position/structuralIssues`` lists every ``Position/StructuralIssue`` in a
+position, so a caller can choose which to enforce. Never use these checks on
+stored data: restore, sync and re-import use ``Position/init(fen:)``.
+
 ## FEN accessors
 
 | Accessor | What it contains | Use for |
