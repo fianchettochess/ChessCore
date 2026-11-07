@@ -988,7 +988,7 @@ public enum PGNParser {
     /// Spell an evaluation the way the `[%eval …]` command wants it, or answer
     /// `nil` when it cannot be spelled that way at all.
     ///
-    /// This is the INVERSE of the `[%eval …]` branch of ``parseEngineComment``
+    /// This is the INVERSE of the `[%eval …]` branch of ``parseEngineComment(_:)``
     /// and lives beside it so the pair cannot drift: `parseEngineComment`
     /// reports a mate distance as `M3` / `-M3` and a decimal exactly as
     /// written, and this turns those back into `#3` / `#-3` and the decimal.
@@ -998,7 +998,7 @@ public enum PGNParser {
     /// python-chess could not see the evaluation at all.
     ///
     /// A decimal is required to have a decimal point with one or two places —
-    /// which is what ``EvalFormat`` produces and what the readers in the field
+    /// which is what FianchettoKit's `EvalFormat` produces and what the readers in the field
     /// accept (python-chess's pattern is `[+-]?\d{0,10}\.\d{1,2}`). A leading
     /// `+` is kept: it is inside every one of those patterns.
     ///
