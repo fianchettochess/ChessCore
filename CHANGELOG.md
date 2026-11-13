@@ -13,6 +13,8 @@ Published tags are never moved or re-cut.
 
 ## [Unreleased]
 
+## [0.17.1] — 2026-11-13
+
 ### Changed
 
 - `MoveNode.isOnMainLine` now includes only the game's first root child and
