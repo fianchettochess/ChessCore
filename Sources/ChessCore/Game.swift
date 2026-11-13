@@ -18,7 +18,16 @@ public final class Game {
     public private(set) var position: Position = .initial()
     public private(set) var startPosition: Position = .initial()
 
-    public var rootChildren: [MoveNode] = []
+    public var rootChildren: [MoveNode] = [] {
+        didSet {
+            for node in oldValue where node.rootGame === self {
+                node.rootGame = nil
+            }
+            for node in rootChildren {
+                node.rootGame = self
+            }
+        }
+    }
     public private(set) var currentNode: MoveNode?
 
     /// Monotonically increasing counter bumped whenever the move-tree

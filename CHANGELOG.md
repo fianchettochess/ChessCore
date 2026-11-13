@@ -11,6 +11,14 @@ breaking `0.10.0`.
 
 Published tags are never moved or re-cut.
 
+## [Unreleased]
+
+### Changed
+
+- `MoveNode.isOnMainLine` now includes only the game's first root child and
+  its first-child chain. Alternative first moves and all their descendants
+  are variations. Stored snapshots and PGN text formats are unchanged.
+
 ## [0.17.0] — 2026-11-07
 
 ### Added

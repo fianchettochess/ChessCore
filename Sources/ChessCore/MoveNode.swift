@@ -31,6 +31,9 @@ public final class MoveNode: Identifiable {
     public let positionBefore: Position
     public var children: [MoveNode] = []
     public weak var parent: MoveNode?
+    // Root moves have no parent to supply sibling order. Game maintains this
+    // weak link when its public rootChildren array changes.
+    internal weak var rootGame: Game?
     public var plyIndex: Int
     public var annotation: MoveAnnotation?
     public var comment: String?
@@ -96,13 +99,16 @@ public final class MoveNode: Identifiable {
     public var variations: ArraySlice<MoveNode> { children.dropFirst() }
     public var hasVariations: Bool { children.count > 1 }
 
+    /// Whether this move follows the game's first root child and first-child
+    /// chain. A standalone tree without a game treats its root as main line.
     public var isOnMainLine: Bool {
         var node = self
         while let parent = node.parent {
             guard parent.children.first === node else { return false }
             node = parent
         }
-        return true
+        guard let game = node.rootGame else { return true }
+        return game.rootChildren.first === node
     }
 
     public func pathFromRoot() -> [MoveNode] {

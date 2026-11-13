@@ -75,9 +75,10 @@ final class DeepMoveTreeStackTests: XCTestCase {
 
         // The only step off the main line is at the root, so the answer for
         // this tip depends on the walk reaching the far end.
-        let rootAlternative = makeNode(parent: first, ply: 1)
-        first.children.append(rootAlternative)
-        let offLineTip = extend(rootAlternative, by: depth - 1)
+        let rootAlternative = makeNode(parent: nil, ply: 0)
+        let offLineTip = extend(rootAlternative, by: depth)
+        let game = Game()
+        game.rootChildren = [first, rootAlternative]
 
         nonisolated(unsafe) let onLine = mainTip
         nonisolated(unsafe) let offLine = offLineTip
@@ -86,6 +87,6 @@ final class DeepMoveTreeStackTests: XCTestCase {
 
         XCTAssertTrue(answers.onMain)
         XCTAssertFalse(answers.offMain)
-        withExtendedLifetime(first) {}
+        withExtendedLifetime(game) {}
     }
 }
