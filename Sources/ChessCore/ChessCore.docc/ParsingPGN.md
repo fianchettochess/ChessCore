@@ -208,6 +208,14 @@ validates the FEN and replays every UCI move through the legal move generator
 before replacing the receiving ``Game``. Decode also bounds node and tag-array
 counts before materializing a hostile snapshot.
 
+Capture throws `GameTreeSnapshotError.tagLimitExceeded` above 4,096 tag pairs,
+and `nodeLimitExceeded` above 65,536 nodes. A custom `maximumNodes` can lower
+that ceiling but cannot raise the deployed reader's limit. Encoding directly
+constructed snapshots enforces the same count limits. No tags or nodes are
+truncated: capture and encode before replacing a previous autosave, and retain
+that autosave if either step throws. Comments and other authored strings have
+no snapshot length limit; annotations are a single ``MoveAnnotation`` value.
+
 ## Round-trip the tag set
 
 ``GameTagCodec`` encodes a full PGN tag set as one escape-safe

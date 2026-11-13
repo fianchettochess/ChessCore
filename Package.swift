@@ -44,7 +44,12 @@ let package = Package(
         // depend on the `ChessCore` library product) and never pulled into the
         // Skip/Android transpile. Run: `swift run -c release ChessCoreBench`.
         .executableTarget(name: "ChessCoreBench", dependencies: ["ChessCore"], path: "Sources/ChessCoreBench"),
-        .testTarget(name: "ChessCoreTests", dependencies: ["ChessCore"], path: "Tests/ChessCoreTests"),
+        .testTarget(
+            name: "ChessCoreTests",
+            dependencies: ["ChessCore"],
+            path: "Tests/ChessCoreTests",
+            resources: [.copy("Fixtures")]
+        ),
     ],
     // Compile public sources in Swift 6 language mode with strict concurrency.
     swiftLanguageModes: [.v6]

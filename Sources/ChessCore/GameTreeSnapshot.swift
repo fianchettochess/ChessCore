@@ -168,6 +168,18 @@ public struct GameTreeSnapshot: Codable, Equatable, Sendable {
     }
 
     public func encode(to encoder: Encoder) throws {
+        // The value initializer is intentionally unchecked. Even snapshots
+        // assembled directly must respect the limits of deployed readers.
+        guard (loadedTags?.count ?? 0) <= Self.maximumLoadedTagPairs else {
+            throw GameTreeSnapshotError.tagLimitExceeded(
+                maximumTags: Self.maximumLoadedTagPairs
+            )
+        }
+        guard nodes.count <= PGNParser.maximumMoveTreeNodes else {
+            throw GameTreeSnapshotError.nodeLimitExceeded(
+                maximumNodes: PGNParser.maximumMoveTreeNodes
+            )
+        }
         var values = encoder.container(keyedBy: CodingKeys.self)
         try values.encode(schemaVersion, forKey: .schemaVersion)
         try values.encode(startFEN, forKey: .startFEN)
@@ -187,12 +199,32 @@ public struct GameTreeSnapshot: Codable, Equatable, Sendable {
     /// Capture one live tree iteratively. Repeated node references are rejected:
     /// they would encode a graph whose single `parent` pointer cannot be restored
     /// truthfully as a tree.
+    ///
+    /// Throws rather than truncating tags or nodes that exceed the reader's
+    /// limits. `maximumNodes` may lower the node limit, but cannot raise it
+    /// above `PGNParser.maximumMoveTreeNodes`. Capture and encode successfully
+    /// before replacing a previous autosave, so a failed save keeps that data.
     public init(
         capturing game: Game,
         maximumNodes: Int = PGNParser.maximumMoveTreeNodes
     ) throws {
         guard maximumNodes >= 0 else {
             throw GameTreeSnapshotError.invalidNodeLimit(maximumNodes)
+        }
+        let maximumNodes = min(maximumNodes, PGNParser.maximumMoveTreeNodes)
+        let capturedTags = try game.loadedTags.map { tags in
+            let keys = tags.insertionOrderedKeys
+            guard keys.count <= Self.maximumLoadedTagPairs else {
+                throw GameTreeSnapshotError.tagLimitExceeded(
+                    maximumTags: Self.maximumLoadedTagPairs
+                )
+            }
+            return try keys.enumerated().compactMap { index, key -> Tag? in
+                guard !key.isEmpty else {
+                    throw GameTreeSnapshotError.emptyTagKey(index: index)
+                }
+                return tags[key].map { Tag(key: key, value: $0) }
+            }
         }
 
         var records: [Node] = []
@@ -253,11 +285,7 @@ public struct GameTreeSnapshot: Codable, Equatable, Sendable {
 
         self.init(
             startFEN: game.startPosition.fen,
-            loadedTags: game.loadedTags.map { tags in
-                tags.insertionOrderedKeys.compactMap { key in
-                    tags[key].map { Tag(key: key, value: $0) }
-                }
-            },
+            loadedTags: capturedTags,
             nodes: records,
             currentNodeIndex: capturedCurrentIndex
         )
