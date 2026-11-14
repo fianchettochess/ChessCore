@@ -1,5 +1,4 @@
 import XCTest
-import CryptoKit
 @testable import ChessCore
 
 /// Gates stored game identity against tokenizer, tag and replay refactors. A
@@ -62,7 +61,7 @@ final class PGNReaderCompatibilityTests: XCTestCase {
     }
 
     private func digest(_ bytes: Data) -> String {
-        SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
+        TestSHA256.hexDigest(bytes)
     }
 
     private func capture(_ name: String, _ input: String) throws -> Golden {

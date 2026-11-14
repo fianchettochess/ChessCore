@@ -13,6 +13,19 @@ Published tags are never moved or re-cut.
 
 ## [Unreleased]
 
+## [0.17.3] — 2026-11-13
+
+### Fixed
+
+- The test suite builds on Linux and Windows again: a 0.17.2 reader test
+  imported Apple-only CryptoKit. The library is unchanged from 0.17.2; this
+  release exists because published tags are never re-cut.
+
+### Changed
+
+- CI runs the current toolchain, Swift 6.4.2 (was 6.3.3), on Windows. The
+  Linux floor job stays on 6.0, the declared minimum.
+
 ## [0.17.2] — 2026-11-13
 
 ### Added
