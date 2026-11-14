@@ -23,6 +23,10 @@ public enum PGNVariationOrder: Sendable {
 /// Callers building `PGNGame` by hand must carry diagnostics and written offsets.
 public struct PGNLenientLoadReport {
     public let game: Game
+    /// Input diagnostics, preserved without adding non-fatal load notices.
+    public let diagnostics: [PGNDiagnostic]
+    /// Non-fatal observations from the input and replay of all branches.
+    public let notices: [PGNLoadNotice]
     /// First recognized annotation written for each annotated node, in token order.
     /// The tree's annotation retains its existing last-wins behavior.
     public let firstAnnotationsByNodeID: [UUID: MoveAnnotation]
@@ -44,6 +48,8 @@ public struct PGNLenientLoadReport {
     public let variationOrder: PGNVariationOrder
     /// Placement cannot safely be inferred, contradicts written numbers, or was not checked.
     public let hasUncertainVariationPlacement: Bool
+    /// Records omitted from the input that produced this surviving game.
+    public let oversizedRecordsSkipped: Int
 
     /// Whether rewriting loses no text that lacks a tree home.
     /// An annotation pass may still replace authored best moves, evals, or glyphs.
@@ -52,17 +58,18 @@ public struct PGNLenientLoadReport {
     /// parsing may split at a bracket-only line or skip an oversized record.
     public var canReplaceStoredText: Bool {
         uncarriedText.isEmpty && droppedMoveTokens.isEmpty && !hasUnterminatedBraceComment && !mainLineDiffersFromSnapshot
-            && !exceedsExportVariationDepth && !hasUnrecognizedSetupTag && !hasInconsistentMoveNumbers && !hasUncertainVariationPlacement && imputedMoves.isEmpty
+            && !exceedsExportVariationDepth && !hasUnrecognizedSetupTag && !hasInconsistentMoveNumbers && !hasUncertainVariationPlacement && imputedMoves.isEmpty && oversizedRecordsSkipped == 0
     }
 
     /// Whether rewriting is safe if the caller preserves the leading comments from the stored row.
     public var canReplaceStoredTextKeepingLeadingComments: Bool {
         uncarriedText.count == leadingComments.count && droppedMoveTokens.isEmpty && !hasUnterminatedBraceComment && !mainLineDiffersFromSnapshot
-            && !exceedsExportVariationDepth && !hasUnrecognizedSetupTag && !hasInconsistentMoveNumbers && !hasUncertainVariationPlacement && imputedMoves.isEmpty
+            && !exceedsExportVariationDepth && !hasUnrecognizedSetupTag && !hasInconsistentMoveNumbers && !hasUncertainVariationPlacement && imputedMoves.isEmpty && oversizedRecordsSkipped == 0
     }
 }
 
 private final class PGNLoadAccounting {
+    var notices: [PGNLoadNotice] = []
     var firstAnnotationsByNodeID: [UUID: MoveAnnotation] = [:]
     func record(_ annotation: MoveAnnotation?, for node: MoveNode) {
         guard let annotation else { return }
@@ -79,11 +86,13 @@ private final class PGNLoadAccounting {
 extension PGNParser {
 
     // A bare destination can be read as a pawn capture, but exporting it
-    // adds the origin file and changes the stored token.
-    private static func isInferredPawnCapture(_ san: String, _ move: Move) -> Bool {
+    // adds the origin file and changes the stored token. Notices also recognize
+    // explicit P prefixes; loss accounting keeps 0.17.1's narrower detection.
+    static func isInferredPawnCapture(_ san: String, _ move: Move, includingPawnPrefix: Bool = true) -> Bool {
         guard move.piece == .pawn, move.from.file != move.to.file else { return false }
         var word = san
         while let last = word.last, "+#!?".contains(last) { word.removeLast() }
+        if includingPawnPrefix, word.first == "P" { word.removeFirst() }
         guard word.count >= 2, Square(algebraic: String(word.prefix(2))) != nil else { return false }
         let rest = word.dropFirst(2)
         return rest.isEmpty || rest.first == "=" || (rest.count == 1 && rest.first.map { "QRBNqrbn".contains($0) } == true)
@@ -120,16 +129,22 @@ extension PGNParser {
     /// Preserve the original text whenever this report indicates loss or uncertainty.
     public static func loadGameWithReport(from pgnGame: PGNGame) -> PGNLenientLoadReport? {
         let accounting = PGNLoadAccounting()
+        accounting.notices = pgnGame.notices
         guard let game = try? materialize(pgnGame, maximumTreeNodes: maximumMoveTreeNodes,
                                           rejectsUnparseableMainLine: false, accounting: accounting) else { return nil }
-        return PGNLenientLoadReport(game: game, firstAnnotationsByNodeID: accounting.firstAnnotationsByNodeID, imputedMoves: [], droppedMoveTokens: accounting.dropped,
+        return PGNLenientLoadReport(game: game, diagnostics: pgnGame.diagnostics, notices: accounting.notices, firstAnnotationsByNodeID: accounting.firstAnnotationsByNodeID, imputedMoves: [], droppedMoveTokens: accounting.dropped,
             uncarriedText: accounting.uncarried, leadingComments: accounting.leading, headCommentsMovedToBranchPoint: accounting.headComments,
             hasUnterminatedBraceComment: pgnGame.diagnostics.contains(.unterminatedBraceComment),
             mainLineDiffersFromSnapshot: mainLineDiffers(pgnGame, game: game),
             exceedsExportVariationDepth: exceedsExportDepth(game),
             hasUnrecognizedSetupTag: pgnGame.tags.orderedKeys.contains { $0 != "FEN" && $0.uppercased() == "FEN" },
             hasInconsistentMoveNumbers: pgnGame.hasInconsistentMoveNumbers,
-            variationOrder: accounting.order, hasUncertainVariationPlacement: accounting.uncertain)
+            variationOrder: accounting.order, hasUncertainVariationPlacement: accounting.uncertain,
+            oversizedRecordsSkipped: pgnGame.recordDiagnostics.reduce(0) { count, diagnostic in
+                switch diagnostic {
+                case .oversizedRecordsSkipped(let skipped, _): return max(count, skipped)
+                }
+            })
     }
 
     /// Opt in to conservative main-line repair. An unreadable token is replaced
@@ -140,6 +155,7 @@ extension PGNParser {
     /// well-formed move or a legally corrupted move can yield a wrong unique
     /// reading, for example `...19. Qd1 Qb3 20. Qb1 Nc3` with an extra Qd1.
     public static func loadGameWithImputation(from pgnGame: PGNGame) -> PGNLenientLoadReport? {
+        let pgnGame = replayInput(pgnGame)
         guard var position = startingPosition(for: pgnGame) else { return nil }
         let flat = pgnGame.moveTokens.isEmpty
         var tokens = flat ? pgnGame.moves.map { PGNToken.move($0) } : pgnGame.moveTokens
@@ -208,7 +224,7 @@ extension PGNParser {
         guard report.droppedMoveTokens.isEmpty && !report.mainLineDiffersFromSnapshot else {
             return loadGameWithReport(from: pgnGame)
         }
-        return PGNLenientLoadReport(game: report.game, firstAnnotationsByNodeID: report.firstAnnotationsByNodeID, imputedMoves: imputed,
+        return PGNLenientLoadReport(game: report.game, diagnostics: report.diagnostics, notices: report.notices, firstAnnotationsByNodeID: report.firstAnnotationsByNodeID, imputedMoves: imputed,
             droppedMoveTokens: report.droppedMoveTokens,
             uncarriedText: report.uncarriedText, leadingComments: report.leadingComments, headCommentsMovedToBranchPoint: report.headCommentsMovedToBranchPoint,
             hasUnterminatedBraceComment: report.hasUnterminatedBraceComment,
@@ -216,7 +232,8 @@ extension PGNParser {
             exceedsExportVariationDepth: report.exceedsExportVariationDepth,
             hasUnrecognizedSetupTag: report.hasUnrecognizedSetupTag,
             hasInconsistentMoveNumbers: report.hasInconsistentMoveNumbers,
-            variationOrder: report.variationOrder, hasUncertainVariationPlacement: report.hasUncertainVariationPlacement)
+            variationOrder: report.variationOrder, hasUncertainVariationPlacement: report.hasUncertainVariationPlacement,
+            oversizedRecordsSkipped: report.oversizedRecordsSkipped)
     }
 
     static func hasImputationShape(_ token: String) -> Bool {
@@ -269,6 +286,7 @@ extension PGNParser {
     }
 
     private static func mainLineDiffers(_ input: PGNGame, game: Game) -> Bool {
+        let input = replayInput(input)
         var position = game.startPosition
         var moves: [Move] = []
         var depth = 0
@@ -305,6 +323,7 @@ extension PGNParser {
         rejectsUnparseableMainLine: Bool,
         accounting: PGNLoadAccounting? = nil
     ) throws -> Game {
+        let pgnGame = replayInput(pgnGame)
         // A non-positive node budget admits no tree at all; surface it as a
         // catchable diagnostic rather than trapping a public throwing API.
         guard maximumTreeNodes > 0 else {
@@ -345,7 +364,10 @@ extension PGNParser {
                         maximumNodes: maximumTreeNodes
                     )
                 }
-                if word.altered || isInferredPawnCapture(word.san, move) { accounting?.uncarried.append(san) }
+                if word.altered || isInferredPawnCapture(word.san, move, includingPawnPrefix: false) { accounting?.uncarried.append(san) }
+                if isInferredPawnCapture(word.san, move) {
+                    accounting?.notices.append(.inferredPawnCapture(san: san, plyIndex: materializedNodeCount))
+                }
                 game.applyMoveFromPGN(move)
                 if let node = game.currentNode {
                     let annotation = MoveAnnotation.extract(from: word.san).annotation ?? word.nag.flatMap(MoveAnnotation.from(nag:))
@@ -451,11 +473,14 @@ extension PGNParser {
                     continue
                 }
 
-                if word.altered || isInferredPawnCapture(cleanedSan, move) { accounting?.uncarried.append(san) }
+                if word.altered || isInferredPawnCapture(cleanedSan, move, includingPawnPrefix: false) { accounting?.uncarried.append(san) }
 
                 let parentNode = nodeStack.last ?? nil
                 let siblings = parentNode?.children ?? game.rootChildren
                 let ply = (parentNode?.plyIndex ?? -1) + 1
+                if isInferredPawnCapture(cleanedSan, move) {
+                    accounting?.notices.append(.inferredPawnCapture(san: san, plyIndex: ply))
+                }
                 defer {
                     if continuationIsPending[continuationIsPending.count - 1] {
                         continuationIsPending[continuationIsPending.count - 1] = false
@@ -738,9 +763,22 @@ extension PGNExporter {
         !name.isEmpty && !name.contains(where: { $0.isNewline || $0 == "\"" })
     }
 
+    /// Legacy numbering always starts at `1.`. Stored movetext and its hashes
+    /// depend on these bytes, including for games starting from a FEN.
     public static func moveText(for rootChildren: [MoveNode]) -> String {
+        moveText(for: rootChildren, basePly: 0)
+    }
+
+    /// Opt in to numbering from the FEN's fullmove number and side to move.
+    /// A Black first move is written as `N...`. Pass the game's start position;
+    /// adopting this overload changes stored movetext hashes for FEN starts.
+    public static func moveText(for rootChildren: [MoveNode], numberingFrom startPosition: Position) -> String {
+        moveText(for: rootChildren, basePly: startPlyOffset(for: startPosition))
+    }
+
+    private static func moveText(for rootChildren: [MoveNode], basePly: Int) -> String {
         var result = String()
-        writeNodes(rootChildren, basePly: 0, into: &result)
+        writeNodes(rootChildren, basePly: basePly, into: &result)
         if result.hasSuffix(" ") { result.removeLast() }
         return result
     }

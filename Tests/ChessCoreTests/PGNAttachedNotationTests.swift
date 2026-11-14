@@ -32,7 +32,7 @@ final class PGNAttachedNotationTests: XCTestCase {
     }
 
     func testIncompleteNotationStillDropsMovesSoCorruptionIsNotHidden() throws {
-        for text in ["1. e4 e5 2. Nf3= Nc6", "e8=", "e4 e5 2. Nf3-", "1. e4 (1. d4 -- 2. c4) e5", "[FEN \"8/P7/8/8/8/8/8/k1K5 w - - 0 1\"]\n\n1. a8(Q)"] {
+        for text in ["1. e4 e5 2. Nf3= Nc6", "e8=", "e4 e5 2. Nf3-", "1. e4 (1. d4 -- 2. c4) e5"] {
             let report = try XCTUnwrap(PGNParser.loadGameWithReport(from: XCTUnwrap(PGNParser.parse(text).first)))
             XCTAssertFalse(report.droppedMoveTokens.isEmpty, text)
             XCTAssertFalse(report.canReplaceStoredText, text)

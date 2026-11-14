@@ -101,6 +101,30 @@ before and after, the ``MoveAnnotation`` (from `!?`-style suffixes or NAGs), any
 inline comment, and engine eval / best-move / clock data extracted from the
 comment.
 
+A file-less pawn move such as the last `d5` in `1. e4 d5 2. d5` still
+replays as `exd5`. The snapshot's `notices` reports
+`.inferredPawnCapture(san: "d5", plyIndex: 2)` without dropping moves or
+changing the input tokens. Ply indices start at zero relative to the game's
+start position. `loadGameWithReport` carries the same ``PGNLoadNotice`` values
+in `notices`, including captures inferred in variations; the main-line snapshot
+only reports its replayed prefix. Notices never mean a game is unusable and must
+not exclude it from mining, scoring, or autosave. `PGNGame.notices` defaults to
+empty (tokenization does not replay moves); supplied notices carry into replay
+results. Notices do not affect `diagnostics` or stored-text replacement flags.
+
+`PGNDiagnostic` and snapshot diagnostics retain their 0.17.1 behavior, including
+for repaired parenthesized promotions: the improved replay can return moves
+while diagnostics still report the original unreadable promotion token.
+
+Adding `notices` changes the stored layout of `PGNGame`, `ParsedMainLine`, and
+`PGNLenientLoadReport`. `PGNGame()` remains source-compatible; the other structs
+have no public initializer. Their internal synthesized memberwise initializers
+now require `notices` (relevant to `@testable` clients). Relative to 0.17.1,
+`recordDiagnostics` on `PGNGame`, and `diagnostics` and `oversizedRecordsSkipped`
+on the report, are also added stored properties; the report's internal initializer
+also gains those parameters. No existing public initializer gains a required
+parameter. Switches over `PGNDiagnostic` retain exactly the 0.17.1 cases.
+
 ### What a comment yields
 
 ``PGNParser/parseEngineComment(_:)`` splits a `{ … }` comment into the engine
@@ -178,6 +202,19 @@ to its flat `moves` list) — including `{}` comments and `$n` NAGs:
 ```swift
 let movetext = PGNExporter.tokenText(from: game)
 ```
+
+`PGNExporter.moveText(for:)` keeps legacy numbering starting at `1.` even for
+FEN starts, preserving stored movetext bytes and hashes. To opt in to the FEN's
+fullmove number and side to move, pass the live game's start position:
+
+```swift
+let movetext = PGNExporter.moveText(
+    for: liveGame.rootChildren, numberingFrom: liveGame.startPosition)
+```
+
+A Black first move at fullmove 23 is written as `23...`. Adopting this overload
+changes movetext hashes for FEN starts and requires a caller's storage migration.
+The full `export(game:tags:)` API continues to use FEN numbering as before.
 
 ## Preserve a live tree losslessly
 
