@@ -13,6 +13,38 @@ Published tags are never moved or re-cut.
 
 ## [Unreleased]
 
+## [0.17.2] — 2026-11-13
+
+### Added
+
+- `PGNLoadNotice`: non-fatal observations on parsed games, reports and
+  main-line snapshots (`notices`). The first is `.inferredPawnCapture`, when a
+  pawn move written without its file letter is read as a capture
+  (`1. e4 d5 2. d5`). The game, its tokens and its identity are unchanged, and
+  notices never mean a game is unusable.
+- `PGNRecordDiagnostic.oversizedRecordsSkipped`: `parse()` now reports a
+  record it skipped for size instead of silently replacing a first record with
+  the next game.
+- `PGNExporter.moveText(for:numberingFrom:)`: opt-in move numbering for games
+  that start from a FEN. Numbers follow the FEN's fullmove number and side to
+  move, and Black's first move is written `N...`. `moveText(for:)` is
+  byte-identical to 0.17.1; stored movetext and identities depend on it.
+- `a8(Q)` promotion spelling.
+
+### Fixed
+
+- `GameTreeSnapshot` capture and encoding refuse what the reader refuses:
+  more than 4,096 tags, more nodes than `PGNParser.maximumMoveTreeNodes`, or
+  an empty tag key. A caller now learns at save time and keeps its previous
+  autosave; before, the snapshot was written and then refused on load, losing
+  the whole autosaved board. Snapshots 0.17.1 could read are encoded
+  byte-identically.
+
+### Unchanged
+
+- `PGNDiagnostic` keeps exactly its 0.17.1 cases. Code that treats any
+  diagnostic as "this game is unusable" accepts every game it accepted before.
+
 ## [0.17.1] — 2026-11-13
 
 ### Changed
