@@ -17,6 +17,22 @@ public enum PGNDiagnostic: Error, Equatable, Sendable {
     case moveTreeNodeLimitExceeded(maximumNodes: Int)
 }
 
+/// Non-fatal observations made while loading PGN. Notices never mean that a
+/// game is unusable and must not be used to exclude it from downstream work.
+/// They do not change diagnostics or the report's stored-text replacement flags.
+public enum PGNLoadNotice: Equatable, Sendable {
+    /// A file-less pawn move was read as a capture. The game is retained;
+    /// `plyIndex` is zero-based relative to its start, including in variations.
+    case inferredPawnCapture(san: String, plyIndex: Int)
+}
+
+/// Issues affecting record selection rather than interpretation of its moves.
+/// Kept separate from diagnostics about interpreting a record's moves.
+public enum PGNRecordDiagnostic: Equatable, Sendable {
+    /// Attached to the first surviving record; use `parseCounted` when none survive.
+    case oversizedRecordsSkipped(count: Int, beforeFirstGame: Bool)
+}
+
 // MARK: - PGN Game model
 
 public struct PGNGame: Identifiable, Sendable {
@@ -26,6 +42,9 @@ public struct PGNGame: Identifiable, Sendable {
     public var result: String? = nil
     public var moveTokens: [PGNToken] = []
     public var diagnostics: [PGNDiagnostic] = []
+    /// Carried into replay results. Tokenization alone does not infer captures.
+    public var notices: [PGNLoadNotice] = []
+    public var recordDiagnostics: [PGNRecordDiagnostic] = []
     /// Written main-line move numbers disagree with the intervening moves.
     public var hasInconsistentMoveNumbers: Bool = false
     /// Written head position minus the enclosing line’s preceding move position.
@@ -123,6 +142,8 @@ public struct ParsedMainLine: Sendable {
     public let startPosition: Position
     public let moves: [MainLineMoveSnapshot]
     public let diagnostics: [PGNDiagnostic]
+    /// Non-fatal observations from the input and the replayed main-line prefix.
+    public let notices: [PGNLoadNotice]
 }
 
 // MARK: - PGN Parser (tokenize / parse / snapshot)
@@ -143,6 +164,8 @@ public struct PGNParseResult: Sendable {
 
 public enum PGNParser {
 
+    /// Parse surviving records. The first survivor carries a diagnostic when
+    /// records were skipped; `parseCounted` also reports loss with no survivors.
     public static func parse(_ pgn: String) -> [PGNGame] {
         parseCounted(pgn).games
     }
@@ -299,6 +322,10 @@ public enum PGNParser {
             games.append(current)
         }
 
+        if oversizedRecordsSkipped > 0, !games.isEmpty {
+            games[0].recordDiagnostics.append(.oversizedRecordsSkipped(
+                count: oversizedRecordsSkipped, beforeFirstGame: firstRecordSkipped))
+        }
         return PGNParseResult(games: games, oversizedRecordsSkipped: oversizedRecordsSkipped,
                               firstRecordSkipped: firstRecordSkipped)
     }
@@ -714,6 +741,7 @@ public enum PGNParser {
 
     /// Parse a word from PGN movetext, accepting notation attached to the move that
     /// the lexer keeps in one word: `...e5`, `1\u{2026}e5`, `e4$1`, `Nf3+-`, `a8=q`, `a8/Q`.
+    /// Also accepts `a8(Q)` when replay has reassembled its legacy tokens.
     /// `parseMove` stays strict for SAN that did not come from movetext.
     public static func parseMoveWord(_ word: String, in position: Position) -> Move? {
         parseMove(readableMoveWord(word).san, in: position)
@@ -723,7 +751,7 @@ public enum PGNParser {
 
     /// The move inside a movetext word. Never changes a word `parseMove` reads:
     /// every rewrite needs a prefix or suffix that no readable SAN has.
-    static func readableMoveWord(_ word: String) -> (san: String, nag: Int?, altered: Bool) {
+    static func readableMoveWord(_ word: String, repairParenthesizedPromotions: Bool = true) -> (san: String, nag: Int?, altered: Bool) {
         var san = Substring(word)
         let digits = san.prefix { $0.isASCII && $0.isNumber }
         if san.dropFirst(digits.count).first == "\u{2026}" { san = san.dropFirst(digits.count) }
@@ -754,6 +782,13 @@ public enum PGNParser {
         var result = String(san)
         var marks = ""
         while let last = result.last, "+#!?".contains(last) { marks.insert(result.removeLast(), at: marks.startIndex) }
+        if repairParenthesizedPromotions, result.count >= 5, result.last == ")" {
+            let suffix = Array(result.suffix(3))
+            let stem = String(result.dropLast(3))
+            if suffix[0] == "(", "QRBNqrbn".contains(suffix[1]), isPromotionStem(stem) {
+                result = stem + "=" + suffix[1].uppercased()
+            }
+        }
         if result.count >= 4, let piece = result.last, "qrbnQRBN".contains(piece) {
             let separator = result[result.index(result.endIndex, offsetBy: -2)]
             let rank = result[result.index(result.endIndex, offsetBy: -3)]
@@ -763,6 +798,52 @@ public enum PGNParser {
         }
         result += marks
         return (result, nag, result != word)
+    }
+
+    private static func isPromotionStem(_ word: String) -> Bool {
+        let chars = Array(word)
+        guard let rank = chars.last, rank == "1" || rank == "8",
+              let file = chars.first, ("a"..."h").contains(String(file)) else { return false }
+        return chars.count == 2 || (chars.count == 4 && chars[1] == "x"
+            && ("a"..."h").contains(String(chars[2])))
+    }
+
+    /// Parenthesized promotion letters used to look like an unreadable pawn
+    /// move followed by an unreadable variation. Repair only that lossy shape
+    /// for replay. The public tokens MUST remain unchanged: downstream stored
+    /// content identities hash them, including the parentheses and piece word.
+    static func replayInput(_ input: PGNGame) -> PGNGame {
+        let source = input.moveTokens
+        guard source.count >= 4, source.contains(where: {
+            if case .move(let word) = $0 { return isPromotionStem(readableMoveWord(word).san) }
+            return false
+        }) else { return input }
+        var tokens: [PGNToken] = []
+        var offsets: [Int: Int] = [:]
+        var index = 0
+        var changed = false
+        while index < source.count {
+            if let offset = input.variationWrittenOffsets[index] { offsets[tokens.count] = offset }
+            if index + 3 < source.count,
+               case .move(let stem) = source[index], isPromotionStem(readableMoveWord(stem).san),
+               case .variationStart = source[index + 1],
+               case .move(let piece) = source[index + 2], piece.count == 1,
+               let letter = piece.first, "QRBNqrbn".contains(letter),
+               case .variationEnd = source[index + 3] {
+                tokens.append(.move(stem + "(" + piece + ")"))
+                index += 4
+                changed = true
+            } else {
+                tokens.append(source[index])
+                index += 1
+            }
+        }
+        guard changed else { return input }
+        var replay = input
+        replay.moveTokens = tokens
+        replay.moves = flatMoves(from: tokens)
+        replay.variationWrittenOffsets = offsets
+        return replay
     }
 
     /// Whether a movetext word, with any quality mark already removed, marks up
@@ -827,6 +908,30 @@ public enum PGNParser {
         from pgnGame: PGNGame,
         pliesLimit: Int = Int.max
     ) -> ParsedMainLine {
+        let replay = replayInput(pgnGame)
+        let snapshot = replayMainLineSnapshot(from: replay, pliesLimit: pliesLimit,
+                                               repairParenthesizedPromotions: true)
+        let changesWord: (String) -> Bool = {
+            $0.contains("(") && readableMoveWord($0).san
+                != readableMoveWord($0, repairParenthesizedPromotions: false).san
+        }
+        let changesReading = replay.moveTokens.count != pgnGame.moveTokens.count
+            || (pgnGame.moveTokens.isEmpty ? pgnGame.moves.contains(where: changesWord)
+                : pgnGame.moveTokens.contains { if case .move(let word) = $0 { return changesWord(word) }; return false })
+        guard changesReading else { return snapshot }
+        // Repaired promotions retain their improved replay, but diagnostics are
+        // a compatibility contract: evaluate the original input as 0.17.1 did.
+        let legacy = replayMainLineSnapshot(from: pgnGame, pliesLimit: pliesLimit,
+                                             repairParenthesizedPromotions: false)
+        return ParsedMainLine(startPosition: snapshot.startPosition, moves: snapshot.moves,
+                              diagnostics: legacy.diagnostics, notices: snapshot.notices)
+    }
+
+    private static func replayMainLineSnapshot(
+        from pgnGame: PGNGame,
+        pliesLimit: Int,
+        repairParenthesizedPromotions: Bool
+    ) -> ParsedMainLine {
         // Invalid setup input fails closed. Falling back to the initial board
         // would make unrelated SAN appear valid and manufacture a line.
         guard let startPosition = startingPosition(for: pgnGame) else {
@@ -834,11 +939,13 @@ public enum PGNParser {
             return ParsedMainLine(
                 startPosition: .initial(),
                 moves: [],
-                diagnostics: pgnGame.diagnostics + [.invalidFEN(fen)]
+                diagnostics: pgnGame.diagnostics + [.invalidFEN(fen)],
+                notices: pgnGame.notices
             )
         }
         var position = startPosition
         var moves: [MainLineMoveSnapshot] = []
+        var notices = pgnGame.notices
 
         let tokens: [PGNToken] = pgnGame.moveTokens.isEmpty
             ? pgnGame.moves.map { .move($0) }
@@ -866,7 +973,7 @@ public enum PGNParser {
                     continue
                 }
                 if isReportNoise(san) || (san.hasPrefix("[") && san.hasSuffix("]")) { continue }
-                let word = readableMoveWord(san)
+                let word = readableMoveWord(san, repairParenthesizedPromotions: repairParenthesizedPromotions)
                 let (cleanedSan, written) = MoveAnnotation.extract(from: word.san)
                 let annotation = written ?? word.nag.flatMap(MoveAnnotation.from(nag:))
                 // Generate the legal-move list once for both the SAN parse and
@@ -884,8 +991,12 @@ public enum PGNParser {
                                 san: cleanedSan,
                                 plyIndex: moves.count
                             )
-                        ]
+                        ],
+                        notices: notices
                     )
+                }
+                if isInferredPawnCapture(cleanedSan, move) {
+                    notices.append(.inferredPawnCapture(san: san, plyIndex: moves.count))
                 }
                 let positionBefore = position
                 let notation = MoveGenerator.algebraicNotation(for: move, in: positionBefore, legalMoves: legal)
@@ -953,7 +1064,8 @@ public enum PGNParser {
         return ParsedMainLine(
             startPosition: startPosition,
             moves: moves,
-            diagnostics: pgnGame.diagnostics
+            diagnostics: pgnGame.diagnostics,
+            notices: notices
         )
     }
 
