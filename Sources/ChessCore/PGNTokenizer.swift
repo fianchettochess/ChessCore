@@ -417,7 +417,77 @@ public enum PGNParser {
     }
 
     public static func tokenize(_ moveText: String) -> [PGNToken] {
-        scan(moveText).tokens
+        asciiTokens(moveText) ?? scan(moveText).tokens
+    }
+
+    /// `scan(_:).tokens` for ASCII text with no carriage return, walking bytes.
+    ///
+    /// In such text every `Character` is one byte (a carriage return before a
+    /// line feed would form one `Character`), `isWhitespace` is exactly
+    /// U+0009...U+000D and U+0020, `isNewline` U+000A...U+000D, and
+    /// `isNumber` the ASCII digits, so the byte walk takes the same branches
+    /// as `scan` and yields the same tokens. The move-number bookkeeping
+    /// `scan` also does affects only its diagnostics, never its tokens.
+    /// Returns nil for any other text, which `scan` reads.
+    static func asciiTokens(_ moveText: String) -> [PGNToken]? {
+        var text = moveText
+        return text.withUTF8 { bytes -> [PGNToken]? in
+            for byte in bytes where byte >= 0x80 || byte == 0x0D { return nil }
+            func isNewline(_ b: UInt8) -> Bool { b >= 0x0A && b <= 0x0D }
+            func isWhitespace(_ b: UInt8) -> Bool { (b >= 0x09 && b <= 0x0D) || b == 0x20 }
+            func string(_ range: Range<Int>) -> String { String(decoding: bytes[range], as: UTF8.self) }
+            var tokens: [PGNToken] = []
+            var i = 0
+            let n = bytes.count
+            while i < n {
+                let b = bytes[i]
+                if b == 0x25 /* % */ && (i == 0 || isNewline(bytes[i - 1])) {
+                    while i < n && !isNewline(bytes[i]) { i += 1 }
+                } else if b == 0x28 /* ( */ {
+                    tokens.append(.variationStart); i += 1
+                } else if b == 0x29 /* ) */ {
+                    tokens.append(.variationEnd); i += 1
+                } else if b == 0x7B /* { */ {
+                    var end = i + 1
+                    while end < n && bytes[end] != 0x7D { end += 1 }
+                    if end < n {
+                        tokens.append(.comment(string(i + 1..<end)))
+                        i = end + 1
+                    } else {
+                        i = n
+                    }
+                } else if b == 0x3B /* ; */ {
+                    let start = i + 1
+                    i = start
+                    while i < n && !isNewline(bytes[i]) { i += 1 }
+                    tokens.append(.comment(string(start..<i)))
+                } else if isWhitespace(b) {
+                    i += 1
+                } else {
+                    let start = i
+                    while i < n, !isWhitespace(bytes[i]), bytes[i] != 0x28, bytes[i] != 0x29,
+                          bytes[i] != 0x7B, bytes[i] != 0x3B { i += 1 }
+                    let word = string(start..<i)
+                    if word.hasPrefix("$"), let nag = Int(word.dropFirst()) {
+                        tokens.append(.nag(nag))
+                    } else if isResult(word) {
+                        continue
+                    } else {
+                        let stripped = stripMoveNumberPrefix(word)
+                        if !stripped.isEmpty { tokens.append(.move(stripped)) }
+                    }
+                }
+            }
+            return tokens
+        }
+    }
+
+    /// Test-only audit of the byte scanner against `scan` (pgn-fast-scan):
+    /// whether `tokenize` would give `scan`'s tokens for `moveText`.
+    @_spi(FastScanAudit)
+    public static func fastScanAgrees(_ moveText: String) -> Bool {
+        guard let fast = asciiTokens(moveText) else { return true }
+        return String(reflecting: fast) == String(reflecting: scan(moveText).tokens)
     }
 
     /// Tokenize move text and return any diagnostics discovered while scanning it.
