@@ -13,6 +13,15 @@ Published tags are never moved or re-cut.
 
 ## [Unreleased]
 
+## [0.17.4] — 2026-11-20
+
+### Changed
+
+- `PGNParser.tokenize` walks ASCII move text (no carriage return) byte by
+  byte instead of by `Character`, for the same tokens. Any other text takes
+  the existing path. A test-only audit, `PGNParser.fastScanAgrees` (SPI
+  `FastScanAudit`), compares the two.
+
 ## [0.17.3] — 2026-11-13
 
 ### Fixed
